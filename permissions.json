@@ -1,5 +1,5 @@
 {
-    "Phoenix":     { "tracer": false, "fastmap": false, "spilkpk": false, "carejector": false, "quickmap": false },
+    "Phoenix":     { "tracer": true, "fastmap": true, "spilkpk": true, "carejector": true, "quickmap": true },
     "Tucson":      { "tracer": false, "fastmap": false, "spilkpk": false, "carejector": false, "quickmap": false },
     "Scottdale":   { "tracer": false, "fastmap": false, "spilkpk": false, "carejector": false, "quickmap": false },
     "Chandler":    { "tracer": false, "fastmap": false, "spilkpk": false, "carejector": false, "quickmap": false },
