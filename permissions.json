@@ -2,7 +2,7 @@
     "Phoenix":     { "tracer": true, "fastmap": true, "spilkpk": true, "carejector": true, "quickmap": true },
     "Tucson":      { "tracer": true, "fastmap": true, "spilkpk": false, "carejector": false, "quickmap": true },
     "Scottdale":   { "tracer": false, "fastmap": false, "spilkpk": false, "carejector": false, "quickmap": false },
-    "Chandler":    { "tracer": false, "fastmap": false, "spilkpk": true, "carejector": false, "quickmap": false },
+    "Chandler":    { "tracer": true, "fastmap": true, "spilkpk": true, "carejector": true, "quickmap": true },
     "Brainburg":   { "tracer": false,  "fastmap": false, "spilkpk": true, "carejector": false, "quickmap": false },
     "Saint Rose":  { "tracer": true, "fastmap": true, "spilkpk": true, "carejector": true, "quickmap": true },
     "Mesa":        { "tracer": true, "fastmap": true, "spilkpk": true, "carejector": true, "quickmap": true },
