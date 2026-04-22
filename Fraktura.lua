@@ -139,7 +139,7 @@ local wplinebuff
 local fastmapbuff
 local wptogglebuff
 local lasttry = 0
-local prostoahyet = false
+local prostoahyet = false --А ЗАЧЕМ?
 buffer = imgui.new.char[256](u8(config.main.text))
 kapchebbX = new.int(config.main.kapchebX)
 kapchebbY = new.int(config.main.kapchebY)
@@ -170,8 +170,8 @@ badcolor = '{A83022}'
 ownname = 'Fraktura'
 btag = badcolor..'['..ownname..']: {FFFFFF}'
 gtag = goodcolor..'['..ownname..']: {FFFFFF}'
-version = '1.0 release'
-version_n = 1
+version = '1.01'
+version_n = 2
 menu = 1
 update_state = false
 messageSettings = false
@@ -489,7 +489,7 @@ end
 function initHotkeys()
     trainbuff = hotkey.RegisterHotKey('trainbuff', false, decodeJson(config.additional.captrainkey), function()
         lua_thread.create(function()
-            if not sampIsCursorActive() and isPlayerPlaying(PLAYER_PED) then
+            if isPlayerActive() then
                 if config.additional.captrain then
                     wait(config.additional.customizeddelay and math.random() * (340 - 40) + 40 or 34)
                     showCaptcha()
@@ -654,7 +654,7 @@ function tickCaptcha()
             if config.main.newtimer then
                 printStyledString('~g~' .. time2 .. ' sec!', 1000, 7)
             else
-                msg(string.format('{ffffff}Right code [%.3f]', time2), "good")
+                msg(string.format('{ffffff}Верный код! [%.3f]', time2), "good")
             end
             if os.clock() - captime < config.captcha.record or config.captcha.record == 0 then
                 config.captcha.record = floorStep(os.clock() - captime, 0.001)
@@ -664,7 +664,7 @@ function tickCaptcha()
             if config.main.newtimer then
                 printStyledString('~r~' .. time2 .. ' sec!', 1000, 7)
             else
-                msg(string.format('{ffffff}Wrong code! [%.3f] (' .. captcha .. '0|' .. input .. ')', time2), "bad")
+                msg(string.format('{ffffff}Неверный код! [%.3f] (' .. captcha .. '0|' .. input .. ')', time2), "bad")
             end
         end
     end
