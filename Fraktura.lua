@@ -171,7 +171,7 @@ ownname = 'Fraktura'
 btag = badcolor..'['..ownname..']: {FFFFFF}'
 gtag = goodcolor..'['..ownname..']: {FFFFFF}'
 version = '1.01'
-version_n = 2
+version_n = 3
 menu = 1
 update_state = false
 messageSettings = false
@@ -290,11 +290,11 @@ function checkUpdates()
         sampfuncsLog("[u] Ошибка парсинга JSON!")
         return
     end
-
+    print(resp.info["version_n"])
     if tonumber(resp.info["version_n"]) > version_n then
         oldVersion = true
         msg("Есть обновление! Версия: " .. resp.info["version"], "good")
-        msg("Что бы узнать больше, откройте меню скрипта", "good")
+        msg("Что бы обновить, откройте Настройки.", "good")
     end
 end
 
@@ -1112,14 +1112,6 @@ local newFrame = imgui.OnFrame(
                 imgui.SetCursorPosY(SEP_LAST_COLUMN)
                 imgui.Separator()
                 imgui.SetCursorPosX(5)
-                if resp and tonumber(resp.info["version_n"]) > version_n then 
-                    if ia.MaterialButton(faicons('cloud')) then 
-                        update_state = true
-                        msg("Обновляемся, подождите", "good")
-                    end
-                    ia.Hint('##updaaaaaaate', u8'Кнопка для обновления скрипта, если вы этого ещё не сделали.') 
-                    imgui.Dummy(imgui.ImVec2(0, 32.5))
-                end
                 if imgui.Button(faicons('power_off')) then thisScript():unload() end
                 ia.Hint('##offnitvar', u8'Выключить скрипт.') 
                 if imgui.Button(faicons('trash'), imgui.SameLine()) then
@@ -1145,6 +1137,13 @@ local newFrame = imgui.OnFrame(
                     msg("Настройки успешно сброшены", "good")
                 end
                 ia.Hint('stoknastr', u8'Вернуть скрипт к стандартным настройкам.') 
+                if resp and tonumber(resp.info["version_n"]) > version_n then 
+                    if ia.MaterialButton(faicons('cloud'), imgui.SameLine()) then 
+                        update_state = true
+                        msg("Обновляемся, подождите", "good")
+                    end
+                    ia.Hint('##updaaaaaaate', u8'Кнопка для обновления скрипта, если вы этого ещё не сделали.') 
+                end
                 if ia.MaterialButton(faicons('comments')..'', imgui.SameLine(285)) then 
                     messageSettings = true
                 end  
