@@ -170,8 +170,8 @@ badcolor = '{A83022}'
 ownname = 'Fraktura'
 btag = badcolor..'['..ownname..']: {FFFFFF}'
 gtag = goodcolor..'['..ownname..']: {FFFFFF}'
-version = '1.01'
-version_n = 3
+version = '1.02'
+version_n = 4
 menu = 1
 update_state = false
 messageSettings = false
@@ -290,7 +290,6 @@ function checkUpdates()
         sampfuncsLog("[u] Ошибка парсинга JSON!")
         return
     end
-    print(resp.info["version_n"])
     if tonumber(resp.info["version_n"]) > version_n then
         oldVersion = true
         msg("Есть обновление! Версия: " .. resp.info["version"], "good")
@@ -1007,6 +1006,7 @@ local newFrame = imgui.OnFrame(
                 if not isLauncherActive then
                     if permissions.quickmap then
                         switchButton('Быстрое открытие карты', config.additional, 'quickmap')
+                        ia.Hint('##quickmap', u8'При зажатии заданной клавиши, у вас откроется мапа', imgui.GetStyle().Colors[imgui.Col.TextDisabled])
                         if config.additional.quickmap then
                             imgui.SameLine()
                             if quickmapbuff:ShowHotKey() then 
@@ -1085,7 +1085,6 @@ local newFrame = imgui.OnFrame(
                         inicfg.save(config, "project_fraktura")
                     end
                 end
-                ia.Hint('##quickmap', u8'При зажатии заданной клавиши, у вас откроется мапа', imgui.GetStyle().Colors[imgui.Col.TextDisabled])
                 imgui.SetCursorPosY(SEP_THIRD_COLUMN)
                 imgui.Separator()
             elseif active_tab == 4 then
@@ -1099,7 +1098,6 @@ local newFrame = imgui.OnFrame(
                 imgui.Separator()
                 imgui.Dummy(imgui.ImVec2(0, 5))
                 switchButton('Выключить авто-обновления', config.customization, 'disableautoupdate')
-                ia.Hint('##messagesettings', u8'Кнопка для настройки сообщений', imgui.GetStyle().Colors[imgui.Col.TextDisabled])
                 switchButton('Перекраска сообщений о покупке имущества', config.customization, 'recolor')
                 imgui.Dummy(imgui.ImVec2(0, 1))
                 imgui.Separator()
@@ -1147,6 +1145,7 @@ local newFrame = imgui.OnFrame(
                 if ia.MaterialButton(faicons('comments')..'', imgui.SameLine(285)) then 
                     messageSettings = true
                 end  
+                ia.Hint('##messagesettings', u8'Кнопка для настройки сообщений', imgui.GetStyle().Colors[imgui.Col.TextDisabled])
             end
         imgui.EndChild()
         imgui.PopStyleColor()
@@ -1286,11 +1285,18 @@ function main()
     initResources()
     initHotkeys()
 
+    sampRegisterChatCommand('fraktura', function() 
+        nickname    = getSelfName()
+        server_city = parseServer()
+        date_str    = os.date('%a') .. ', ' .. os.date('%d') .. ' ' .. os.date('%B')
+        renderWindow[0] = not renderWindow[0]
+    end)
+
     if thisScript().filename ~= 'Fraktura.lua' then
         os.rename(getGameDirectory() .. "/moonloader/" .. thisScript().filename,
                   getGameDirectory() .. "/moonloader/Fraktura.lua")
     end
-    msg('Loaded! Activation: ' .. badcolor .. 'F2.', "bad")
+    msg('Загружен! Активация: ' .. badcolor .. 'F2 {ffffff}или ' ..  badcolor ..'/fraktura', "bad")
 
     addEventHandler('onWindowMessage', function(var_msg, wparam, lparam)
         if var_msg == wm.WM_KEYDOWN or var_msg == wm.WM_SYSKEYDOWN then
@@ -1324,9 +1330,9 @@ function main()
         getTime = os.time() + servernoe
 
         if update_state then
-            downloadUrlToFile(script_url, script_path, function(id, status)
+            downloadUrlToFile(script_url, thisScript().path, function(id, status, err)
                 if status == dlstatus.STATUS_ENDDOWNLOADDATA then
-                    msg("Script updated successfully!", "good")
+                    msg("Скрипт успешно обновлен!", "good")
                     thisScript():reload()
                 end
             end)
