@@ -23,6 +23,9 @@ local updates_url = 'https://raw.githubusercontent.com/blackw1ndow/project_frakt
 local script_url = 'https://raw.githubusercontent.com/blackw1ndow/project_fraktura/main/Fraktura.lua'
 local permissions_url = 'https://raw.githubusercontent.com/blackw1ndow/project_fraktura/refs/heads/main/permissions.json'
 
+version = '1.03'
+version_n = 5
+
 serverPermissions = {}
 resp = nil
 
@@ -46,6 +49,8 @@ local servernoe = 0
 local active_tab = 1
 local zoom = 115.0
 local interval = 100
+local captchaZero = true --сюда не лазить обнову не спойлерить иначе убью
+local zeroChance = 0.8
 
 local config = inicfg.load({
     main = {
@@ -170,8 +175,6 @@ badcolor = '{A83022}'
 ownname = 'Fraktura'
 btag = badcolor..'['..ownname..']: {FFFFFF}'
 gtag = goodcolor..'['..ownname..']: {FFFFFF}'
-version = '1.02'
-version_n = 4
 menu = 1
 update_state = false
 messageSettings = false
@@ -645,10 +648,12 @@ function tickCaptcha()
     local result, button, _, input = sampHasDialogRespond(trainingDlgId)
     if not result then return end
     time2 = string.format("%.3f", os.clock() - captime)
-    button, input = trButt, trInput -- от слова жопа
+    if button == 255 then
+        button, input = trButt, trInput -- от слова жопа ОТ СЛОВА ЖОПА БЛЯДЬ
+    end
 
     if button == 1 then
-        if input == captcha .. '0' then
+        if input == captcha then
             config.captcha.vcode = config.captcha.vcode + 1
             if config.main.newtimer then
                 printStyledString('~g~' .. time2 .. ' sec!', 1000, 7)
@@ -663,7 +668,7 @@ function tickCaptcha()
             if config.main.newtimer then
                 printStyledString('~r~' .. time2 .. ' sec!', 1000, 7)
             else
-                msg(string.format('{ffffff}Неверный код! [%.3f] (' .. captcha .. '0|' .. input .. ')', time2), "bad")
+                msg(string.format('{ffffff}Неверный код! [%.3f] (' .. captcha .. '|' .. input .. ')', time2), "bad")
             end
         end
     end
@@ -1632,7 +1637,8 @@ end
 
 function showCaptcha()
     removeTextdraws()
-    math.randomseed(os.time() * os.clock() * os.clock() * math.random(1, 9999))
+    math.randomseed(os.time() + math.floor(os.clock() * 1000000))
+    for i = 1, 20 do math.random() end
 
     local r = math.random()^0.4
     if math.random(0, 1) == 1 then r = 1 - r end
@@ -1649,13 +1655,20 @@ function showCaptcha()
     sampTextdrawSetBoxColorAndSize(t, 1, 0xFF759DA3, 400, 0.000000)
 
     nextPos = math.random() * (31 - 30) - 30.5
-
-    math.randomseed(os.time() * os.clock())
     for i = 1, 4 do
         a = math.random(0, 9)
         table.insert(captchaTable, a)
         captcha = captcha..a
     end
+
+    local lastDigit
+    if captchaZero or math.random() < zeroChance then
+        lastDigit = 0
+    else
+        lastDigit = math.random(0, 9)
+    end
+    table.insert(captchaTable, lastDigit)
+    captcha = captcha..lastDigit
 
     for i = 0, 4 do
         nextPos = nextPos + math.random() * (31 - 30) + 29.5
@@ -1664,8 +1677,7 @@ function showCaptcha()
         sampTextdrawSetLetterSizeAndColor(t, 0, (math.random() * (5.3 - 5) + 5) * scale, 0x80808080)
         sampTextdrawSetBoxColorAndSize(t, 1, 0xFF1A2432, 30, math.random() * (26.5 - 25) + 25)
         sampTextdrawSetAlign(t, 2)
-        if i < 4 then GenerateTextDraw(captchaTable[i + 1], 259 + nextPos, 124, 3 + i * 2, scale)
-        else GenerateTextDraw(0, 259 + nextPos, 124, 3 + i * 10, scale) end
+        GenerateTextDraw(captchaTable[i + 1], 259 + nextPos, 124, 3 + i * 2, scale)
     end
     captchaTable = {}
     sampShowDialog(trainingDlgId, '{F89168}Тренировка капчи', '{FFFFFF}Введите {C6FB4A}5{FFFFFF} символов, которые\nпоявились у Вас {C6FB4A}на{FFFFFF} экране.', 'Принять', 'Отмена', 1)
