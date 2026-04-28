@@ -4,7 +4,7 @@
     "Scottdale":   { "tracer": true, "fastmap": true, "spilkpk": true, "carejector": true, "quickmap": true },
     "Chandler":    { "tracer": false, "fastmap": false, "spilkpk": true, "carejector": false, "quickmap": false },
     "Brainburg":   { "tracer": false,  "fastmap": false, "spilkpk": true, "carejector": false, "quickmap": false },
-    "SaintRose":  { "tracer": true, "fastmap": true, "spilkpk": true, "carejector": true, "quickmap": true },
+    "SaintRose":   { "tracer": true, "fastmap": true, "spilkpk": true, "carejector": true, "quickmap": true },
     "Mesa":        { "tracer": true, "fastmap": true, "spilkpk": true, "carejector": true, "quickmap": true },
     "Red-Rock":    { "tracer": true, "fastmap": true, "spilkpk": false, "carejector": true, "quickmap": false },
     "Yuma":        { "tracer": true, "fastmap": true, "spilkpk": false, "carejector": true, "quickmap": true },
