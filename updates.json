@@ -1,7 +1,7 @@
 {
     "info" : {
-        "version" : "1.03",
-        "version_n" : "5",
-        "version_info" : "Фикс для RestoreDialog (старые диалоги)"
+        "version" : "1.1 beta 1",
+        "version_n" : "6",
+        "version_info" : "Интеграция обновления, удалены вырезы. Версии до 1.1 beta 1 перестанут работать 06.08.2026"
     }
 }
