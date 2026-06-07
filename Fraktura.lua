@@ -22,8 +22,8 @@ local dlstatus = require('moonloader').download_status
 local updates_url = 'https://raw.githubusercontent.com/blackw1ndow/project_fraktura/refs/heads/main/updates.json'
 local script_url = 'https://raw.githubusercontent.com/blackw1ndow/project_fraktura/main/Fraktura.lua'
 
-version = '1.1 beta 1'
-version_n = 6
+version = '1.1 beta 2'
+version_n = 7
 
 resp = nil
 
@@ -39,8 +39,6 @@ local servernoe = 0
 local active_tab = 1
 local zoom = 115.0
 local interval = 100
-local captchaZero = true --сюда не лазить обнову не спойлерить иначе убью
-local zeroChance = 0.8
 
 local config = inicfg.load({
     main = {
@@ -59,6 +57,8 @@ local config = inicfg.load({
         captrain = false,
         captrainkey = '[85]',
         customizeddelay = false,
+        captchazero = false,
+        zerochance = 0.8,
         antibattlepass = false,
         antiwbook = false,
         fd = false,
@@ -155,6 +155,7 @@ sizeServerTimeYinput = new.float(config.additional.servertimeSizeY)
 timeServerPosXinput = new.int(config.additional.timeServerPosX)
 timeServerPosYinput = new.int(config.additional.timeServerPosY)
 timeServerColorinput = new.char[8](tostring(config.additional.servertimeColor))
+zerochanceinput = new.float(config.additional.zerochance)
 
 local hasWp = false
 local wpX, wpY, wpZ = 0.0, 0.0, 0.0
@@ -175,6 +176,7 @@ messageSettings = false
 resetConfig = false
 isLauncherActive = false
 timeSettings = false
+captchaSettings = false
 anotherSettings = false
 
 -- Настройки WPLine (когда то в гуишку занесу)
@@ -486,7 +488,7 @@ function initHotkeys()
         end
     end)
     limitbuff = hotkey.RegisterHotKey('limitbuff', false, decodeJson(config.additional.limitkey), function()
-        if config.additional.limit and not sampIsCursorActive() and isPlayerPlaying(PLAYER_PED) and not isCharInAnyCar(PLAYER_PED) then
+        if config.additional.limit and not sampIsCursorActive() and isPlayerPlaying(PLAYER_PED) and isCharInAnyCar(PLAYER_PED) then
             if not limitActivated then 
                 sampSendChat('/limit 30')
                 limitActivated = true 
@@ -900,14 +902,8 @@ local newFrame = imgui.OnFrame(
                 ia.Hint('##kapcheb', u8'При появлении капчи, она будет выставляться точно по центру', imgui.GetStyle().Colors[imgui.Col.TextDisabled])
                 switchButton('Тренировка капчи', config.additional, 'captrain')
                 if config.additional.captrain then
-                    SEP_FISRT_COLUMN = SEP_FISRT_COLUMN + 30
                     imgui.SameLine()
-                    if trainbuff:ShowHotKey() then 
-                        config.additional.captrainkey = encodeJson(trainbuff:GetHotKey()) 
-                        inicfg.save(config, "project_fraktura")
-                    end
-                    switchButton('Рандомная задержка', config.additional, 'customizeddelay')
-                    ia.Hint('##customizeddelay', u8'Задержка после нажатия клавиши открытия капчи', imgui.GetStyle().Colors[imgui.Col.TextDisabled])
+                    if imgui.Button(faicons('gear')) then captchaSettings = true end
                 end
                 imgui.SetCursorPosY(SEP_FISRT_COLUMN)
                 imgui.Separator()
@@ -970,7 +966,7 @@ local newFrame = imgui.OnFrame(
                 imgui.SetCursorPosY(SEP_SECOND_COLUMN)
                 imgui.Separator()
             elseif active_tab == 3 then
-                SEP_THIRD_COLUMN = 280
+                SEP_THIRD_COLUMN = 310
                 imgui.Separator()
                 imgui.Dummy(imgui.ImVec2(0, 5))
                 switchButton('Спиливание передний дверей', config.additional, 'popcardoors') 
@@ -1130,6 +1126,35 @@ local newFrame = imgui.OnFrame(
                     imgui.CloseCurrentPopup()
                     messageSettings = false
                 end
+                imgui.EndPopup()
+            end
+        end
+        if captchaSettings then imgui.OpenPopup(u8'Настройки тренинга капчи')
+            if (imgui.BeginPopupModal(u8'Настройки тренинга капчи', _, imgui.WindowFlags.AlwaysAutoResize + imgui.WindowFlags.NoMove + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoCollapse)) then
+                    imgui.Dummy(imgui.ImVec2(0, 2))
+                    imgui.Text(u8'Кнопка активации тренинга ')
+                    imgui.SameLine()
+                    if trainbuff:ShowHotKey() then 
+                        config.additional.captrainkey = encodeJson(trainbuff:GetHotKey()) 
+                        inicfg.save(config, "project_fraktura")
+                    end
+                    switchButton('Рандомная задержка', config.additional, 'customizeddelay')
+                    ia.Hint('##customizeddelay', u8'Задержка после нажатия клавиши открытия капчи', imgui.GetStyle().Colors[imgui.Col.TextDisabled])
+                    switchButton('Включить капчи без нуля', config.additional, 'captchazero')
+                    ia.Hint('##capzero', u8'При активации, в тренинге начнут выпадать капчи без нулей', imgui.GetStyle().Colors[imgui.Col.TextDisabled])
+                    if config.additional.captchazero then --Вот вообще знаете, это всё неправильно. Надо изучать node.js, покупать claude code, подключать себе этого ии-агента. и жить себе тихо, и мирно. это неправильно. я делаю неправильно.
+                        imgui.PushItemWidth(80)
+                        if imgui.SliderFloat(u8"Шанс выпадения нуля", zerochanceinput, 0.1, 1, '%.1f') then
+                            config.additional.zerochance = zerochanceinput[0]
+                            inicfg.save(config, "project_fraktura")
+                        end
+                        imgui.PopItemWidth()
+                    end
+                    ia.Hint('##debilsadkljsajdlfsjdf', u8'1.0 - всегда ноль, 0.1 - редкое выпадение нуля', imgui.GetStyle().Colors[imgui.Col.TextDisabled])
+                    if imgui.Button(u8'Закрыть') then
+                        imgui.CloseCurrentPopup() 
+                        captchaSettings = false
+                    end
                 imgui.EndPopup()
             end
         end
@@ -1626,7 +1651,7 @@ function showCaptcha()
     end
 
     local lastDigit
-    if captchaZero or math.random() < zeroChance then
+    if not config.additional.captchazero or math.random() < config.additional.zerochance then
         lastDigit = 0
     else
         lastDigit = math.random(0, 9)
