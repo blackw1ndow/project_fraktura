@@ -23,7 +23,7 @@ local updates_url = 'https://raw.githubusercontent.com/blackw1ndow/project_frakt
 local script_url = 'https://raw.githubusercontent.com/blackw1ndow/project_fraktura/main/Fraktura.lua'
 
 version = '1.1 beta 2'
-version_n = 7
+version_n = 8
 
 resp = nil
 
@@ -131,7 +131,6 @@ local quickmapbuff
 local domkratbuff
 local adrenalinebuff
 local limitbuff
-local limitActivated = false
 local sportbuff
 local sbivbuff
 local wplinebuff
@@ -489,13 +488,11 @@ function initHotkeys()
     end)
     limitbuff = hotkey.RegisterHotKey('limitbuff', false, decodeJson(config.additional.limitkey), function()
         if config.additional.limit and not sampIsCursorActive() and isPlayerPlaying(PLAYER_PED) and isCharInAnyCar(PLAYER_PED) then
-            if not limitActivated then 
+            lua_thread.create(function()
                 sampSendChat('/limit 30')
-                limitActivated = true 
-            else 
+                wait(100)
                 sampSendChat('/limit 0') 
-                limitActivated = false
-            end
+            end)
         end
     end)
     sportbuff = hotkey.RegisterHotKey('sportbuff', false, decodeJson(config.additional.sportkey), function()
