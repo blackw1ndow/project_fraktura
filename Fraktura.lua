@@ -15,6 +15,7 @@ local socket = require('socket')
 encoding.default = 'CP1251'
 local u8 = encoding.UTF8
 local mX, mY = getScreenResolution()
+local centerX, centerY = (mX / 2) - 300, (mY / 2) - 50
 local wm = require 'windows.message'
 local new, str, sizeof = imgui.new, ffi.string, ffi.sizeof
 local imgLogo = nil
@@ -22,8 +23,8 @@ local dlstatus = require('moonloader').download_status
 local updates_url = 'https://raw.githubusercontent.com/blackw1ndow/project_fraktura/refs/heads/main/updates.json'
 local script_url = 'https://raw.githubusercontent.com/blackw1ndow/project_fraktura/main/Fraktura.lua'
 
-version = '1.1 beta 2'
-version_n = 8
+version = '1.1 beta 3'
+version_n = 9
 
 resp = nil
 
@@ -33,12 +34,15 @@ textures = {
 	marker = nil
 }
 
+govno = {"Негде жить? Арендуйте номер", "Проживая в отеле, Вы получаете множество бонусов", "Подробнее: /hotel"}
+
 local hourValue = 12
 local weatherValue = 1
 local servernoe = 0
 local active_tab = 1
 local zoom = 115.0
 local interval = 100
+local renderMessages = {}
 
 local config = inicfg.load({
     main = {
@@ -52,6 +56,14 @@ local config = inicfg.load({
         kapcheb = false,
         kapchebX = 240,
         kapchebY = 125,
+    },
+    pluschat = {
+        pluschat = false,
+        font = "Arial",
+        size = 12,
+        --x = 300,
+        --y = 300,
+        lines = 4,
     },
     additional = {
         captrain = false,
@@ -159,6 +171,7 @@ zerochanceinput = new.float(config.additional.zerochance)
 local hasWp = false
 local wpX, wpY, wpZ = 0.0, 0.0, 0.0
 local wpFont = nil
+local plusChatFont = nil
 
 resX, resY = getScreenResolution()
 posX, posY = resX / 1.5, resY / 1.5
@@ -451,6 +464,7 @@ function initResources()
     textures.cursor = renderLoadTextureFromFileInMemory(memory.strptr(cursor_data), #cursor_data)
     textures.marker = renderLoadTextureFromFileInMemory(memory.strptr(marker_data), #marker_data)
     wpFont          = renderCreateFont("Tahoma", 10, 5)
+    plusChatFont    = renderCreateFont("Arial", 12, 5)
     renderTimeFont  = renderCreateFont(config.additional.timeFont, config.additional.timeSize, config.additional.timeStyle)
 end
 
@@ -905,13 +919,15 @@ local newFrame = imgui.OnFrame(
                 imgui.SetCursorPosY(SEP_FISRT_COLUMN)
                 imgui.Separator()
             elseif active_tab == 2 then
-                SEP_SECOND_COLUMN = 160
+                SEP_SECOND_COLUMN = 190
                 imgui.Separator()
                 imgui.Dummy(imgui.ImVec2(0, 5))
                 switchButton('Анти баттл-пас', config.additional, 'antibattlepass')
                 ia.Hint('##antibp', u8'Не открывает баттл-пас при нажатии на B', imgui.GetStyle().Colors[imgui.Col.TextDisabled])
                 switchButton('Анти /wbook', config.additional, 'antiwbook')
                 ia.Hint('##antiwb', u8'Не открывает меню организации при нажатии на M, команда всё ещё работает', imgui.GetStyle().Colors[imgui.Col.TextDisabled])
+                switchButton('Плюс-чат', config.pluschat, 'pluschat')
+                ia.Hint('##pluschat', u8'При активации, строка о том, что пришел пейдей выводится на экран', imgui.GetStyle().Colors[imgui.Col.TextDisabled])
                 if not isLauncherActive then
                     SEP_SECOND_COLUMN = SEP_SECOND_COLUMN + 30
                     switchButton('Fogdist', config.additional, 'fd')
@@ -1337,6 +1353,20 @@ function main()
         tickAnotherTime()
         tickCaptcha()
 
+        if config.pluschat.pluschat and plusChatFont then
+            if #renderMessages > config.pluschat.lines then
+                table.remove(renderMessages, 1)
+            end
+            local y = centerY
+            for k, v in ipairs(renderMessages) do
+                if k <= config.pluschat.lines then
+                    local text = v[2]
+                    renderFontDrawText(plusChatFont, text, centerX, y, bit.bor(v[1], 0xFF000000))
+                    y = y + renderGetFontDrawHeight(plusChatFont) + 2
+                end
+            end
+        end
+
         if config.additional.wpline and hasWp then drawWpTracer() end
         if config.additional.fastmap then renderMap() end
     end
@@ -1467,7 +1497,12 @@ function ev.onServerMessage(color, text)
           return false
       end
     end
-    if string.find(text, 'PC LAUNCHER') then isLauncherActive = true return false end
+    for _, v in ipairs(govno) do
+        if find(text, v) then
+            table.insert(renderMessages, {bit.rshift(color, 8), text, os.time()})
+        end
+    end
+    if text:find('PC LAUNCHER') then isLauncherActive = true return false end
     if text:find("выкинул") then
         if config.additional.carejector then
             config.additional.carejector = false
@@ -1797,7 +1832,8 @@ function isPlayerInWorld(interior_id)
 	end
 	return (interior_id == 0)
 end
-
+function find(s, p) return string.rlower(s):find(string.rlower(p), 1, true) end
+function rainbow(speed, alpha) return math.floor(math.sin(os.clock() * speed) * 127 + 128), math.floor(math.sin(os.clock() * speed + 2) * 127 + 128), math.floor(math.sin(os.clock() * speed + 4) * 127 + 128), alpha end
 function join_argb(a, r, g, b) local argb = b argb = bit.bor(argb, bit.lshift(g, 8)) argb = bit.bor(argb, bit.lshift(r, 16)) argb = bit.bor(argb, bit.lshift(a, 24)) return argb end
 function explode_argb(argb) local a = bit.band(bit.rshift(argb, 24), 0xFF) local r = bit.band(bit.rshift(argb, 16), 0xFF) local g = bit.band(bit.rshift(argb, 8), 0xFF) local b = bit.band(argb, 0xFF) return a, r, g, b end
 function convertCoord(xx,yy)
@@ -1825,6 +1861,28 @@ function convertCoord(xx,yy)
 	local x = mapSize[1] + (wx + 3000) * multiplier
 	local y = mapSize[2] + mapSize[3] - (wy + 3000) * multiplier
 	return x,y
+end
+
+local russian_characters = {
+    [168] = 'Ё', [184] = 'ё', [192] = 'А', [193] = 'Б', [194] = 'В', [195] = 'Г', [196] = 'Д', [197] = 'Е', [198] = 'Ж', [199] = 'З', [200] = 'И', [201] = 'Й', [202] = 'К', [203] = 'Л', [204] = 'М', [205] = 'Н', [206] = 'О', [207] = 'П', [208] = 'Р', [209] = 'С', [210] = 'Т', [211] = 'У', [212] = 'Ф', [213] = 'Х', [214] = 'Ц', [215] = 'Ч', [216] = 'Ш', [217] = 'Щ', [218] = 'Ъ', [219] = 'Ы', [220] = 'Ь', [221] = 'Э', [222] = 'Ю', [223] = 'Я', [224] = 'а', [225] = 'б', [226] = 'в', [227] = 'г', [228] = 'д', [229] = 'е', [230] = 'ж', [231] = 'з', [232] = 'и', [233] = 'й', [234] = 'к', [235] = 'л', [236] = 'м', [237] = 'н', [238] = 'о', [239] = 'п', [240] = 'р', [241] = 'с', [242] = 'т', [243] = 'у', [244] = 'ф', [245] = 'х', [246] = 'ц', [247] = 'ч', [248] = 'ш', [249] = 'щ', [250] = 'ъ', [251] = 'ы', [252] = 'ь', [253] = 'э', [254] = 'ю', [255] = 'я',
+}
+function string.rlower(s)
+    s = tostring(s):lower()
+    local strlen = s:len()
+    if strlen == 0 then return s end
+    s = s:lower()
+    local output = ''
+    for i = 1, strlen do
+        local ch = s:byte(i)
+        if ch >= 192 and ch <= 223 then -- upper russian characters
+            output = output .. russian_characters[ch + 32]
+        elseif ch == 168 then -- Ё
+            output = output .. russian_characters[184]
+        else
+            output = output .. string.char(ch)
+        end
+    end
+    return output
 end
 
 function getMapSize()
