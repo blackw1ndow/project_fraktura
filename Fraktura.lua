@@ -23,8 +23,8 @@ local dlstatus = require('moonloader').download_status
 local updates_url = 'https://raw.githubusercontent.com/blackw1ndow/project_fraktura/refs/heads/main/updates.json'
 local script_url = 'https://raw.githubusercontent.com/blackw1ndow/project_fraktura/main/Fraktura.lua'
 
-version = '1.1 beta 3'
-version_n = 9
+version = '1.2'
+version_n = 10
 
 resp = nil
 
@@ -41,8 +41,66 @@ local weatherValue = 1
 local servernoe = 0
 local active_tab = 1
 local zoom = 115.0
-local interval = 100
 local renderMessages = {}
+
+local defaultAccent, defaultGoodColor, defaultBadColor = 0xFF0000, 0x22A872, 0xA83022
+
+local themeColors = {
+    { key = 'Text',                 name = 'Текст',                            fixed = {0.95, 0.96, 0.98, 1.00} },
+    { key = 'TextDisabled',         name = 'Подсказки, неактивный текст',      fixed = {0.60, 0.60, 0.60, 1.00} },
+    { key = 'WindowBg',             name = 'Фон окна',                         base = 0.10, k = 0.05, a = 1.00 },
+    { key = 'ChildBg',              name = 'Фон бокового меню и блоков',       base = 0.10, k = 0.05, a = 1.00 },
+    { key = 'PopupBg',              name = 'Фон окон настроек и подсказок',    base = 0.10, k = 0.05, a = 0.95 },
+    { key = 'TitleBg',              name = 'Заголовок окна',                   base = 0.10, k = 0.05, a = 1.00 },
+    { key = 'TitleBgActive',        name = 'Заголовок окна (активное)',        base = 0.10, k = 0.15, a = 1.00 },
+    { key = 'TitleBgCollapsed',     name = 'Заголовок окна (свёрнутое)',       base = 0.10, k = 0.05, a = 0.75 },
+    { key = 'Border',               name = 'Рамки',                            fixed = {0.50, 0.50, 0.50, 0.50} },
+    { key = 'Separator',            name = 'Разделители',                      fixed = {0.43, 0.43, 0.50, 0.50} },
+    { key = 'SidebarLine',          name = 'Линия у бокового меню',            fixed = {0.29, 0.27, 0.30, 1.00}, custom = true },
+    { key = 'Button',               name = 'Кнопки, выбранная вкладка',        base = 0.10, k = 0.10, a = 1.00 },
+    { key = 'ButtonHovered',        name = 'Кнопки (наведение)',               base = 0.10, k = 0.20, a = 1.00 },
+    { key = 'ButtonActive',         name = 'Кнопки (нажатие), переключатели',  base = 0.10, k = 0.30, a = 1.00 },
+    { key = 'ButtonBorder',         name = 'Обводка кнопок',                   base = 0.10, k = 0.20, a = 1.00, custom = true },
+    { key = 'FrameBg',              name = 'Поля ввода',                       base = 0.10, k = 0.15, a = 1.00 },
+    { key = 'FrameBgHovered',       name = 'Поля ввода (наведение)',           base = 0.10, k = 0.30, a = 1.00 },
+    { key = 'FrameBgActive',        name = 'Поля ввода (нажатие)',             base = 0.10, k = 0.50, a = 1.00 },
+    { key = 'CheckMark',            name = 'Галочки',                          base = 0.10, k = 0.80, a = 1.00 },
+    { key = 'SliderGrab',           name = 'Ползунки',                         base = 0.20, k = 0.60, a = 1.00 },
+    { key = 'SliderGrabActive',     name = 'Ползунки (нажатие)',               base = 0.40, k = 0.55, a = 1.00 },
+    { key = 'Header',               name = 'Раскрывающиеся списки',            base = 0.10, k = 0.10, a = 1.00 },
+    { key = 'HeaderHovered',        name = 'Раскрывающиеся списки (наведение)', base = 0.10, k = 0.30, a = 1.00 },
+    { key = 'HeaderActive',         name = 'Раскрывающиеся списки (нажатие)',  base = 0.10, k = 0.50, a = 1.00 },
+    { key = 'ScrollbarBg',          name = 'Полоса прокрутки (фон)',           base = 0.10, k = 0.05, a = 0.60 },
+    { key = 'ScrollbarGrab',        name = 'Полоса прокрутки',                 base = 0.20, k = 0.60, a = 0.80 },
+    { key = 'ScrollbarGrabHovered', name = 'Полоса прокрутки (наведение)',     base = 0.30, k = 0.60, a = 0.80 },
+    { key = 'ScrollbarGrabActive',  name = 'Полоса прокрутки (нажатие)',       base = 0.40, k = 0.55, a = 1.00 },
+    { key = 'TextSelectedBg',       name = 'Выделение текста',                 fixed = {0.30, 0.60, 0.85, 0.35} },
+    { key = 'ModalWindowDimBg',     name = 'Затемнение под окнами настроек',   fixed = {0.20, 0.20, 0.25, 0.35} },
+}
+
+local function toArgb(r, g, b, a)
+    local function byte(v) return math.floor(math.min(math.max(v, 0), 1) * 255 + 0.5) end
+    return ((byte(a) * 256 + byte(r)) * 256 + byte(g)) * 256 + byte(b)
+end
+
+local function argbToVec4(argb)
+    return imgui.ImVec4(math.floor(argb / 65536) % 256 / 255, math.floor(argb / 256) % 256 / 255,
+        argb % 256 / 255, math.floor(argb / 16777216) % 256 / 255)
+end
+
+local function themeFromAccent(accent, theme)
+    local ar, ag, ab = math.floor(accent / 65536) % 256 / 255, math.floor(accent / 256) % 256 / 255, accent % 256 / 255
+    theme = theme or {}
+    theme.accent = accent
+    for _, e in ipairs(themeColors) do
+        if not e.fixed then
+            theme[e.key] = toArgb(e.base + e.k * ar, e.base + e.k * ag, e.base + e.k * ab, e.a)
+        elseif theme[e.key] == nil then
+            theme[e.key] = toArgb(unpack(e.fixed))
+        end
+    end
+    return theme
+end
 
 local config = inicfg.load({
     main = {
@@ -61,9 +119,37 @@ local config = inicfg.load({
         pluschat = false,
         font = "Arial",
         size = 12,
-        --x = 300,
-        --y = 300,
+        style = 5,
+        x = centerX,
+        y = centerY,
         lines = 4,
+        timestamp = false,
+    },
+    carejector = {
+        interval = 100,
+        autooff = true,
+        suppress = false,
+        chatsucc = false,
+        succtext = '',
+        useignore = true,
+        ignorelist = '',
+        dist = 10.0,
+    },
+    wpline = {
+        lineWidth       = 2,
+        lineColor       = 0x90FFFFFF,
+        startHeight     = 0.05,
+        hideDistance    = 200.0,
+        markerEnabled   = true,
+        markerColor     = 0xE0FFFFFF,
+        markerRadius    = 0.4,
+        markerSegments  = 48,
+        markerWidth     = 2,
+        groundOffset    = 0.03,
+        showDistance    = true,
+        textColor       = 0xFFFFFFFF,
+        textSize        = 10,
+        distanceOffsetY = 22,
     },
     additional = {
         captrain = false,
@@ -76,6 +162,8 @@ local config = inicfg.load({
         fd = false,
         dist = 600,
         fdc = 'fogdist',
+        fdkey = '{}',
+        fdvalue = 600,
         settime = false,
         stc = 'stime',
         swc = 'sweather',
@@ -117,12 +205,20 @@ local config = inicfg.load({
     customization = {
         disableautoupdate = false,
         recolor = false,
+        -- dlgstyle = 0,
+    },
+    reconnect = {
+        cmdon = false,
+        cmd = 'recc',
     },
     messages = {
         silent = false,
         console = false,
         chat = true,
+        goodcolor = defaultGoodColor,
+        badcolor = defaultBadColor,
     },
+    theme = themeFromAccent(defaultAccent),
     captcha = {
         record = 0,
         vcode = 0,
@@ -148,12 +244,42 @@ local sbivbuff
 local wplinebuff
 local fastmapbuff
 local wptogglebuff
+local fogdistbuff
+local fogdistOn = false
 local lasttry = 0
 local prostoahyet = false --А ЗАЧЕМ?
 buffer = imgui.new.char[256](u8(config.main.text))
 kapchebbX = new.int(config.main.kapchebX)
 kapchebbY = new.int(config.main.kapchebY)
 fdbuf = imgui.new.char[64](u8(config.additional.fdc))
+fdValueinput = new.int(config.additional.fdvalue)
+ejectIntervalinput = new.int(config.carejector.interval)
+ejectDistinput = new.float(config.carejector.dist)
+ejectTextbuf = new.char[128](u8(tostring(config.carejector.succtext)))
+ejectNickbuf = new.char[32]()
+
+local ejectIgnore = {}
+for nick in tostring(config.carejector.ignorelist):gmatch('[^,]+') do table.insert(ejectIgnore, nick) end
+
+function isEjectIgnored(nick)
+    nick = nick:lower()
+    for _, v in ipairs(ejectIgnore) do
+        if v:lower() == nick then return true end
+    end
+    return false
+end
+
+function addEjectIgnore(nick)
+    nick = nick:match('^%s*(.-)%s*$')
+    if nick == '' or nick:find(',') or isEjectIgnored(nick) then return end
+    table.insert(ejectIgnore, nick)
+    config.carejector.ignorelist = table.concat(ejectIgnore, ',')
+end
+
+function removeEjectIgnore(index)
+    table.remove(ejectIgnore, index)
+    config.carejector.ignorelist = table.concat(ejectIgnore, ',')
+end
 stbuf = imgui.new.char[64](u8(config.additional.stc))
 swbuf = imgui.new.char[64](u8(config.additional.swc))
 styleTimeinput = new.int(config.additional.timeStyle)
@@ -167,42 +293,133 @@ timeServerPosXinput = new.int(config.additional.timeServerPosX)
 timeServerPosYinput = new.int(config.additional.timeServerPosY)
 timeServerColorinput = new.char[8](tostring(config.additional.servertimeColor))
 zerochanceinput = new.float(config.additional.zerochance)
+fontPlusChatinput = new.char[30](tostring(config.pluschat.font))
+sizePlusChatinput = new.int(config.pluschat.size)
+linesPlusChatinput = new.int(config.pluschat.lines)
 
 local hasWp = false
 local wpX, wpY, wpZ = 0.0, 0.0, 0.0
 local wpFont = nil
 local plusChatFont = nil
+local plusChatChangePos = false
+local fontFlag = require('moonloader').font_flag
+local plusChatStyleFlags = {
+    {'Жирный', fontFlag.BOLD}, {'Курсив', fontFlag.ITALICS},
+    {'Обводка', fontFlag.BORDER}, {'Тень', fontFlag.SHADOW},
+}
 
 resX, resY = getScreenResolution()
 posX, posY = resX / 1.5, resY / 1.5
-ffgoodcolor = '22A872'
-ffbadcolor = 'A83022' 
-goodcolor = '{22A872}'
-badcolor = '{A83022}'
 ownname = 'Fraktura'
-btag = badcolor..'['..ownname..']: {FFFFFF}'
-gtag = goodcolor..'['..ownname..']: {FFFFFF}'
+
+function applyMessageColors()
+    ffgoodcolor = string.format('%06X', config.messages.goodcolor)
+    ffbadcolor  = string.format('%06X', config.messages.badcolor)
+    goodcolor = '{' .. ffgoodcolor .. '}'
+    badcolor  = '{' .. ffbadcolor .. '}'
+    btag = badcolor..'['..ownname..']: {FFFFFF}'
+    gtag = goodcolor..'['..ownname..']: {FFFFFF}'
+end
+applyMessageColors()
+
 menu = 1
 update_state = false
-messageSettings = false
+uiSettings = false
 resetConfig = false
-isLauncherActive = false
 timeSettings = false
 captchaSettings = false
 anotherSettings = false
+plusChatSettings = false
+ejectSettings = false
+reconnectSettings = false
 
--- Настройки WPLine (когда то в гуишку занесу)
-local WP = {
-    lineWidth       = 2,
-    markerRadius    = 0.4,
-    markerSegments  = 48,
-    markerWidth     = 2,
-    groundOffset    = 0.03,
-    startHeight     = 0.05,
-    hideDistance    = 200.0,
-    showDistance    = true,
-    distanceOffsetY = 22,
+pcall(ffi.cdef, 'void* GetModuleHandleA(const char* name);')
+pcall(ffi.cdef, 'const char* GetCommandLineA(void);')
+
+local function detectLauncher()
+    if ffi.C.GetModuleHandleA('libcef.asi') ~= nil then return true end
+    return (ffi.string(ffi.C.GetCommandLineA()) .. ' '):find(' %-arizona ') ~= nil
+end
+local detectOk, detected = pcall(detectLauncher)
+isLauncherActive = detectOk and detected or false
+
+-- local dialogStyles = {
+    -- {4, 'Обычный SA-MP'}, {1, 'Без размытия'},
+    -- {2, 'Среднее размытие'}, {3, 'Сильное размытие'},
+-- }
+
+-- function setDialogStyle(style)
+    -- local bs = raknetNewBitStream()
+    -- raknetBitStreamWriteInt8(bs, 53)
+    -- raknetBitStreamWriteInt8(bs, style)
+    -- raknetEmulPacketReceiveBitStream(220, bs)
+    -- raknetDeleteBitStream(bs)
+-- end
+
+local arizonaServers = {
+    { id = '01', name = 'Phoenix',     ip = '185.169.134.3' },
+    { id = '02', name = 'Tucson',      ip = '185.169.134.4' },
+    { id = '03', name = 'Scottdale',   ip = '185.169.134.43' },
+    { id = '04', name = 'Chandler',    ip = '185.169.134.44' },
+    { id = '05', name = 'Brainburg',   ip = '185.169.134.45' },
+    { id = '06', name = 'Saint-Rose',  ip = '185.169.134.5' },
+    { id = '07', name = 'Mesa',        ip = '185.169.134.59' },
+    { id = '08', name = 'Red-Rock',    ip = '185.169.134.61' },
+    { id = '09', name = 'Yuma',        ip = '185.169.134.107' },
+    { id = '10', name = 'Surprise',    ip = '185.169.134.109' },
+    { id = '11', name = 'Prescott',    ip = '185.169.134.166' },
+    { id = '12', name = 'Glendale',    ip = '185.169.134.171' },
+    { id = '13', name = 'Kingman',     ip = '185.169.134.172' },
+    { id = '14', name = 'Winslow',     ip = '185.169.134.173' },
+    { id = '15', name = 'Payson',      ip = '185.169.134.174' },
+    { id = '16', name = 'Gilbert',     ip = '80.66.82.191' },
+    { id = '17', name = 'Show-Low',    ip = '80.66.82.190' },
+    { id = '18', name = 'Casa-Grande', ip = '80.66.82.188' },
+    { id = '19', name = 'Page',        ip = '80.66.82.168' },
+    { id = '20', name = 'Sun-City',    ip = '80.66.82.159' },
+    { id = '21', name = 'Queen-Creek', ip = '80.66.82.200' },
+    { id = '22', name = 'Sedona',      ip = '80.66.82.144' },
+    { id = '23', name = 'Holiday',     ip = '80.66.82.132' },
+    { id = '24', name = 'Wednesday',   ip = '80.66.82.128' },
+    { id = '25', name = 'Yava',        ip = '80.66.82.113' },
+    { id = '26', name = 'Faraway',     ip = '80.66.82.82' },
+    { id = '27', name = 'Bumble Bee',  ip = '80.66.82.87' },
+    { id = '28', name = 'Christmas',   ip = '80.66.82.54' },
+    { id = '29', name = 'Mirage',      ip = '80.66.82.39' },
+    { id = '30', name = 'Love',        ip = '80.66.82.33' },
+    { id = '31', name = 'Drake',       ip = '80.66.82.22' },
+    { id = '32', name = 'Space',       ip = '80.66.82.199' },
 }
+local reconnectSelected = nil
+reconnectNickbuf = new.char[32]()
+reconnectCmdbuf = new.char[32](tostring(config.reconnect.cmd))
+
+function currentServerIndex()
+    local ip = tostring(sampGetCurrentServerAddress()):lower()
+    local host = ip:match('^([%w%-]+)%.') or ''
+    local function norm(s) return (s:lower():gsub('[^%w]', '')) end
+    local city = norm(parseServer())
+    for i, s in ipairs(arizonaServers) do
+        local name = norm(s.name)
+        if s.ip == ip or name == norm(host) or name == city then return i end
+    end
+end
+
+function reconnectTo(ip, port, nick)
+    if nick then sampSetLocalPlayerName(nick) end
+    sampConnectToServer(ip, port)
+end
+
+function reconnectCurrent()
+    local ip, port = sampGetCurrentServerAddress()
+    if not ip or ip == '' then return end
+    msg('Переподключаемся...', 'good')
+    reconnectTo(ip, port)
+end
+wpSettings = false
+
+local WP = config.wpline
+local wpCoordsinput = new.float[3]()
 
 local function wpDist3(x1,y1,z1,x2,y2,z2)
     local dx,dy,dz = x2-x1,y2-y1,z2-z1
@@ -247,11 +464,11 @@ local function wpDrawCircle(cx,cy,cz)
         if not (sx and sy) then return end
         if i == 0 then firstSX,firstSY,prevSX,prevSY = sx,sy,sx,sy
         else
-            renderDrawLine(prevSX,prevSY,sx,sy, WP.markerWidth, 0xE0FFFFFF)
+            renderDrawLine(prevSX,prevSY,sx,sy, WP.markerWidth, WP.markerColor)
             prevSX,prevSY = sx,sy
         end
     end
-    if firstSX then renderDrawLine(prevSX,prevSY,firstSX,firstSY, WP.markerWidth, 0xE0FFFFFF) end
+    if firstSX then renderDrawLine(prevSX,prevSY,firstSX,firstSY, WP.markerWidth, WP.markerColor) end
 end
 
 function drawWpTracer()
@@ -275,13 +492,52 @@ function drawWpTracer()
     if not (targetSX and targetSY) then return end
     if not wpOnScreen(targetSX, targetSY) then return end
 
-    renderDrawLine(startSX, startSY, targetSX, targetSY, WP.lineWidth, 0x90FFFFFF)
-    wpDrawCircle(tx, ty, tz)
+    renderDrawLine(startSX, startSY, targetSX, targetSY, WP.lineWidth, WP.lineColor)
+    if WP.markerEnabled then wpDrawCircle(tx, ty, tz) end
 
     if WP.showDistance and wpFont then
         local text  = string.format("%.0f m", d)
-        local halfW = math.floor((#text * 6) / 2)
-        renderFontDrawText(wpFont, text, targetSX - halfW, targetSY - WP.distanceOffsetY, 0xFFFFFFFF)
+        local halfW = renderGetFontDrawTextLength(wpFont, text) / 2
+        renderFontDrawText(wpFont, text, targetSX - halfW, targetSY - WP.distanceOffsetY, WP.textColor)
+    end
+end
+
+function updateWpFont()
+    if wpFont then renderReleaseFont(wpFont) end
+    wpFont = renderCreateFont("Tahoma", WP.textSize, 5)
+end
+
+function setWp(x, y, z)
+    wpX, wpY, wpZ = x, y, z
+    wpCoordsinput[0], wpCoordsinput[1], wpCoordsinput[2] = x, y, z
+    hasWp = true
+end
+
+local function wpSliderInt(label, key, min, max)
+    local v = new.int(WP[key])
+    if imgui.SliderInt(u8(label), v, min, max) then WP[key] = v[0] return true end
+end
+
+local function wpSliderFloat(label, key, min, max, format)
+    local v = new.float(WP[key])
+    if imgui.SliderFloat(u8(label), v, min, max, format) then WP[key] = v[0] return true end
+end
+
+local function colorEditArgb(label, tbl, key)
+    local v = argbToVec4(tbl[key])
+    local c = new.float[4](v.x, v.y, v.z, v.w)
+    if imgui.ColorEdit4(u8(label), c, imgui.ColorEditFlags.AlphaBar + imgui.ColorEditFlags.NoInputs) then
+        tbl[key] = toArgb(c[0], c[1], c[2], c[3])
+        return true
+    end
+end
+
+local function colorEditRgb(label, tbl, key)
+    local v = argbToVec4(tbl[key])
+    local c = new.float[3](v.x, v.y, v.z)
+    if imgui.ColorEdit3(u8(label), c, imgui.ColorEditFlags.DisplayHex) then
+        tbl[key] = toArgb(c[0], c[1], c[2], 0)
+        return true
     end
 end
 
@@ -384,7 +640,7 @@ end
 function getSelfName()
     result, id = sampGetPlayerIdByCharHandle(PLAYER_PED)
     if result then
-        sampSendChat('/cl '..id)
+        if not isLauncherActive then sampSendChat('/cl '..id) end
         name = sampGetPlayerNickname(id)
     else
         name = "Unavailable"
@@ -443,29 +699,36 @@ function tabButton(label, id, width)
     local is_active = (active_tab == id)
     imgui.SetCursorPosX(3)
 
-    if is_active then
-        imgui.PushStyleColor(imgui.Col.Button,       imgui.ImVec4(0.20, 0.10, 0.10, 1.00))
-        imgui.PushStyleColor(imgui.Col.ButtonHovered,imgui.ImVec4(0.30, 0.10, 0.10, 1.00))
-    else
-        imgui.PushStyleColor(imgui.Col.Button,       imgui.ImVec4(0.05, 0.05, 0.05, 0.00))
-        imgui.PushStyleColor(imgui.Col.ButtonHovered,imgui.ImVec4(0.30, 0.10, 0.10, 1.00))
+    if not is_active then
+        imgui.PushStyleColor(imgui.Col.Button, imgui.ImVec4(0.05, 0.05, 0.05, 0.00))
     end
-    imgui.PushStyleColor(imgui.Col.ButtonActive, imgui.ImVec4(0.40, 0.10, 0.10, 1.00))
 
-    if ia.MaterialButton(label, imgui.ImVec2(width, 38)) then
+    if materialButton(label, imgui.ImVec2(width, 38)) then
         active_tab = id
     end
 
-    imgui.PopStyleColor(3)
+    if not is_active then imgui.PopStyleColor() end
+end
+
+function materialButton(label, size)
+    imgui.PushStyleColor(imgui.Col.ButtonHovered, argbToVec4(config.theme.ButtonBorder))
+    local result = ia.MaterialButton(label, size)
+    imgui.PopStyleColor()
+    return result
 end
 
 function initResources()
     textures.map    = renderLoadTextureFromFileInMemory(memory.strptr(map_data), #map_data)
     textures.cursor = renderLoadTextureFromFileInMemory(memory.strptr(cursor_data), #cursor_data)
     textures.marker = renderLoadTextureFromFileInMemory(memory.strptr(marker_data), #marker_data)
-    wpFont          = renderCreateFont("Tahoma", 10, 5)
-    plusChatFont    = renderCreateFont("Arial", 12, 5)
+    updateWpFont()
     renderTimeFont  = renderCreateFont(config.additional.timeFont, config.additional.timeSize, config.additional.timeStyle)
+    updatePlusChatFont()
+end
+
+function updatePlusChatFont()
+    if plusChatFont then renderReleaseFont(plusChatFont) end
+    plusChatFont = renderCreateFont(config.pluschat.font, config.pluschat.size, config.pluschat.style)
 end
 
 function initHotkeys()
@@ -480,13 +743,12 @@ function initHotkeys()
         end)
     end)
     wplinebuff = hotkey.RegisterHotKey('wplinebuff', false, decodeJson(config.additional.wplinekey), function()
-        if config.additional.wpline then
-            wpX, wpY, wpZ = getCharCoordinates(PLAYER_PED)
-            hasWp = true
+        if config.additional.wpline and isPlayerActive() then
+            setWp(getCharCoordinates(PLAYER_PED))
         end
     end)
     wptogglebuff = hotkey.RegisterHotKey('wptogglebuff', false, decodeJson(config.additional.wptogglekey), function()
-        if config.additional.wpline then hasWp = not hasWp end
+        if config.additional.wpline and isPlayerActive() then hasWp = not hasWp end
     end)
     fastmapbuff  = hotkey.RegisterHotKey('fastmapbuff',  false, decodeJson(config.additional.fastmapkey),  function() end)
     quickmapbuff = hotkey.RegisterHotKey('quickmapbuff', false, decodeJson(config.additional.quickmapkey), function() end)
@@ -519,6 +781,13 @@ function initHotkeys()
             sampSendChat("/piss")
         end
     end)
+    fogdistbuff = hotkey.RegisterHotKey('fogdistbuff', false, decodeJson(config.additional.fdkey), function()
+        if config.additional.fd and isLauncherActive and isPlayerActive() then
+            fogdistOn = not fogdistOn
+            local command = fogdistOn and ('/fogdist ' .. config.additional.fdvalue) or '/fogdist'
+            if sampProcessChatInput then sampProcessChatInput(command) else sampSendChat(command) end
+        end
+    end)
     hotkey.Text.NoKey = u8'Пусто'
     hotkey.Text.WaitForKey = u8'Ждем клавишу...'
 end
@@ -534,6 +803,7 @@ function unregisterHotkeys()
     hotkey.unRegisterHotKey(limitbuff)
     hotkey.unRegisterHotKey(sportbuff)
     hotkey.unRegisterHotKey(sbivbuff)
+    hotkey.unRegisterHotKey(fogdistbuff)
 end
 
 function tickCarDoors()
@@ -632,6 +902,35 @@ function tickAnotherTime()
     sampTextdrawSetOutlineColor(223, 0.5, 0xFF000000)
     sampTextdrawSetAlign(223, 1)
     sampTextdrawSetStyle(223, config.additional.servertimeStyle)
+end
+
+function tickPlusChat()
+    if not config.pluschat.pluschat or not plusChatFont then return end
+    if #renderMessages > config.pluschat.lines then
+        table.remove(renderMessages, 1)
+    end
+
+    local x, y = config.pluschat.x, config.pluschat.y
+    local messages = renderMessages
+    if plusChatChangePos then
+        showCursor(true)
+        x, y = getCursorPos()
+        if #messages == 0 then messages = {{0xFFFFFF, 'Здесь будет плюс-чат', os.time()}} end
+        if isKeyJustPressed(vkeys.VK_LBUTTON) then
+            config.pluschat.x, config.pluschat.y = x, y
+            plusChatChangePos = false
+            inicfg.save(config, "project_fraktura")
+            msg("Расположение плюс-чата сохранено", "good")
+            showCursor(false)
+        end
+    end
+
+    for k, v in ipairs(messages) do
+        if k > config.pluschat.lines then break end
+        local text = config.pluschat.timestamp and os.date("[%H:%M:%S] ", v[3]) .. v[2] or v[2]
+        renderFontDrawText(plusChatFont, text, x, y, bit.bor(v[1], 0xFF000000))
+        y = y + renderGetFontDrawHeight(plusChatFont) + 2
+    end
 end
 
 function tickCaptcha()
@@ -741,50 +1040,23 @@ function imgui.Theme()
     imgui.GetStyle().SelectableTextAlign = imgui.ImVec2(0.5, 0.5)
     
     --==[ COLORS ]==--
-    colors[imgui.Col.Text] = imgui.ImVec4(0.95, 0.96, 0.98, 1.00)
-    colors[imgui.Col.TextDisabled] = imgui.ImVec4(0.60, 0.60, 0.60, 1.00)
-    colors[imgui.Col.WindowBg] = imgui.ImVec4(0.15, 0.10, 0.10, 1.00)
-    colors[imgui.Col.ChildBg] = imgui.ImVec4(0.15, 0.10, 0.10, 1.00)
-    colors[imgui.Col.PopupBg] = imgui.ImVec4(0.15, 0.10, 0.10, 0.95)
-    colors[imgui.Col.Border] = imgui.ImVec4(0.50, 0.50, 0.50, 0.50)
-    colors[imgui.Col.BorderShadow] = imgui.ImVec4(0.00, 0.00, 0.00, 0.00)
-    colors[imgui.Col.FrameBg] = imgui.ImVec4(0.25, 0.10, 0.10, 1.00)
-    colors[imgui.Col.FrameBgHovered] = imgui.ImVec4(0.40, 0.10, 0.10, 1.00)
-    colors[imgui.Col.FrameBgActive] = imgui.ImVec4(0.60, 0.10, 0.10, 1.00)
-    colors[imgui.Col.TitleBg] = imgui.ImVec4(0.15, 0.10, 0.10, 1.00)
-    colors[imgui.Col.TitleBgActive] = imgui.ImVec4(0.25, 0.10, 0.10, 1.00)
-    colors[imgui.Col.TitleBgCollapsed] = imgui.ImVec4(0.15, 0.10, 0.10, 0.75)
-    colors[imgui.Col.ScrollbarBg] = imgui.ImVec4(0.15, 0.10, 0.10, 0.60)
-    colors[imgui.Col.ScrollbarGrab] = imgui.ImVec4(0.80, 0.20, 0.20, 0.80)
-    colors[imgui.Col.ScrollbarGrabHovered] = imgui.ImVec4(0.90, 0.30, 0.30, 0.80)
-    colors[imgui.Col.ScrollbarGrabActive] = imgui.ImVec4(0.95, 0.40, 0.40, 1.00)
-    colors[imgui.Col.Button] = imgui.ImVec4(0.20, 0.10, 0.10, 1.00)
-    colors[imgui.Col.ButtonHovered] = imgui.ImVec4(0.30, 0.10, 0.10, 1.00)
-    colors[imgui.Col.ButtonActive] = imgui.ImVec4(0.40, 0.10, 0.10, 1.00)
-    colors[imgui.Col.Header] = imgui.ImVec4(0.20, 0.10, 0.10, 1.00)
-    colors[imgui.Col.HeaderHovered] = imgui.ImVec4(0.40, 0.10, 0.10, 1.00)
-    colors[imgui.Col.HeaderActive] = imgui.ImVec4(0.60, 0.10, 0.10, 1.00)
-    colors[imgui.Col.Tab] = imgui.ImVec4(0.20, 0.10, 0.10, 1.00)
-    colors[imgui.Col.TabHovered] = imgui.ImVec4(0.40, 0.10, 0.10, 1.00)
-    colors[imgui.Col.TabActive] = imgui.ImVec4(0.60, 0.10, 0.10, 1.00)
-    colors[imgui.Col.PlotLines] = imgui.ImVec4(0.80, 0.20, 0.20, 1.00)
-    colors[imgui.Col.PlotLinesHovered] = imgui.ImVec4(0.90, 0.30, 0.30, 1.00)
-    colors[imgui.Col.PlotHistogram] = imgui.ImVec4(0.80, 0.20, 0.20, 1.00)
-    colors[imgui.Col.PlotHistogramHovered] = imgui.ImVec4(0.90, 0.30, 0.30, 1.00)
-    colors[imgui.Col.TextSelectedBg] = imgui.ImVec4(0.30, 0.60, 0.85, 0.35)
-    colors[imgui.Col.DragDropTarget] = imgui.ImVec4(0.85, 0.60, 0.40, 0.90)
-    colors[imgui.Col.NavHighlight] = imgui.ImVec4(0.80, 0.30, 0.30, 1.00)
-    colors[imgui.Col.NavWindowingHighlight] = imgui.ImVec4(0.90, 0.50, 0.50, 0.70)
-    colors[imgui.Col.NavWindowingDimBg] = imgui.ImVec4(0.20, 0.20, 0.25, 0.20)
-    colors[imgui.Col.CheckMark] = imgui.ImVec4(0.90, 0.10, 0.10, 1.00)
-    colors[imgui.Col.ModalWindowDimBg] = imgui.ImVec4(0.20, 0.20, 0.25, 0.35)
+    applyTheme()
+end
 
-    ffgoodcolor = '22A872'
-    ffbadcolor = 'A83022' 
-    goodcolor = '{22A872}'
-    badcolor = '{A83022}'
-    tag = badcolor..'['..ownname..']: {FFFFFF}' 
-    gtag = goodcolor..'['..ownname..']: {FFFFFF}'
+function applyTheme()
+    local colors = imgui.GetStyle().Colors
+    for _, e in ipairs(themeColors) do
+        if not e.custom then colors[imgui.Col[e.key]] = argbToVec4(config.theme[e.key]) end
+    end
+
+    for i = 1, 64 do
+        local name, pools = debug.getupvalue(ia.MaterialButton, i)
+        if name == nil then break end
+        if name == 'AI_MATERIAL' then
+            for _, pool in pairs(pools) do pool.hovered.color = argbToVec4(config.theme.ButtonBorder) end
+            break
+        end
+    end
 end
 
 local renderWindow = new.bool()
@@ -861,13 +1133,13 @@ local newFrame = imgui.OnFrame(
         dl:AddLine(
             imgui.ImVec2(imgui.GetWindowPos().x + 195, imgui.GetWindowPos().y + 24),
             imgui.ImVec2(imgui.GetWindowPos().x + 195, imgui.GetWindowPos().y + imgui.GetWindowHeight() - 1),
-            0xFF4D444A, 1.0
+            imgui.ColorConvertFloat4ToU32(argbToVec4(config.theme.SidebarLine)), 1.0
         )
 
         dl:AddRectFilled(
             imgui.ImVec2(imgui.GetWindowPos().x + 197, imgui.GetWindowPos().y - 2),
             imgui.ImVec2(imgui.GetWindowPos().x + imgui.GetWindowWidth() + 1, imgui.GetWindowPos().y + imgui.GetWindowHeight() - 2),
-            0xFF191926
+            imgui.ColorConvertFloat4ToU32(imgui.GetStyle().Colors[imgui.Col.WindowBg])
         )
 
         imgui.SameLine()
@@ -928,23 +1200,40 @@ local newFrame = imgui.OnFrame(
                 ia.Hint('##antiwb', u8'Не открывает меню организации при нажатии на M, команда всё ещё работает', imgui.GetStyle().Colors[imgui.Col.TextDisabled])
                 switchButton('Плюс-чат', config.pluschat, 'pluschat')
                 ia.Hint('##pluschat', u8'При активации, строка о том, что пришел пейдей выводится на экран', imgui.GetStyle().Colors[imgui.Col.TextDisabled])
-                if not isLauncherActive then
-                    SEP_SECOND_COLUMN = SEP_SECOND_COLUMN + 30
-                    switchButton('Fogdist', config.additional, 'fd')
-                    ia.Hint('##fogdist', u8'Смена прорисовки по команде в чат. На лаунчере не работает', imgui.GetStyle().Colors[imgui.Col.TextDisabled])
+                if config.pluschat.pluschat then
+                    imgui.SameLine()
+                    if imgui.Button(faicons('gear') .. '##pluschatgear') then plusChatSettings = true end
+                end
+                SEP_SECOND_COLUMN = SEP_SECOND_COLUMN + 30
+                switchButton('Fogdist', config.additional, 'fd')
+                if isLauncherActive then
+                    ia.Hint('##fogdist', u8'Лаунчер: бинд ставит заданную прорисовку через /fogdist, повторное нажатие возвращает стандартную', imgui.GetStyle().Colors[imgui.Col.TextDisabled])
                     if config.additional.fd then
-                        if not isLauncherActive then
-                            imgui.SameLine()
-                            imgui.PushItemWidth(90)
-                            if imgui.InputText('##fdcommand', fdbuf, sizeof(fdbuf) - 1) then
-                                config.additional.fdc = u8:decode(str(fdbuf))
-                            end
-                            imgui.PopItemWidth()
-                            ia.Hint('##fdcom', u8'Команда для смены прорисовки. Для её активации - введите команду, а затем выключите и включите переключатель', imgui.GetStyle().Colors[imgui.Col.TextDisabled])
+                        imgui.SameLine()
+                        if fogdistbuff:ShowHotKey() then
+                            config.additional.fdkey = encodeJson(fogdistbuff:GetHotKey())
+                            inicfg.save(config, "project_fraktura")
                         end
+                        imgui.SameLine()
+                        imgui.PushItemWidth(60)
+                        if imgui.InputInt('##fdvalue', fdValueinput, 0, 0) then
+                            fdValueinput[0] = math.min(math.max(fdValueinput[0], 0), 3600)
+                            config.additional.fdvalue = fdValueinput[0]
+                        end
+                        imgui.PopItemWidth()
+                        ia.Hint('##fdvalue', u8'Дальность прорисовки, которую выставит бинд (0-3600)', imgui.GetStyle().Colors[imgui.Col.TextDisabled])
                     end
                 else
-                    config.additional.fd = false
+                    ia.Hint('##fogdist', u8'Смена прорисовки по команде в чат', imgui.GetStyle().Colors[imgui.Col.TextDisabled])
+                    if config.additional.fd then
+                        imgui.SameLine()
+                        imgui.PushItemWidth(90)
+                        if imgui.InputText('##fdcommand', fdbuf, sizeof(fdbuf) - 1) then
+                            config.additional.fdc = u8:decode(str(fdbuf))
+                        end
+                        imgui.PopItemWidth()
+                        ia.Hint('##fdcom', u8'Команда для смены прорисовки. Для её активации - введите команду, а затем выключите и включите переключатель', imgui.GetStyle().Colors[imgui.Col.TextDisabled])
+                    end
                 end
                 switchButton('Смена погоды и времени', config.additional, 'settime')
                 ia.Hint('##settime', u8'Смена времени и погоды', imgui.GetStyle().Colors[imgui.Col.TextDisabled])
@@ -984,8 +1273,12 @@ local newFrame = imgui.OnFrame(
                 imgui.Dummy(imgui.ImVec2(0, 5))
                 switchButton('Спиливание передний дверей', config.additional, 'popcardoors') 
                 ia.Hint('##kpkgobombmyhouse', u8'При активации, у транспорта в который вы сядете спилятся двери', imgui.GetStyle().Colors[imgui.Col.TextDisabled])
-                switchButton('Авто-выкидывание людей из транспорта', config.additional, 'carejector')
+                switchButton('Авто-выкидывание из транспорта', config.additional, 'carejector')
                 ia.Hint('##autoejector', u8'При активации, будет выкидывать всех, кто сел в машину', imgui.GetStyle().Colors[imgui.Col.TextDisabled])
+                if config.additional.carejector then
+                    imgui.SameLine()
+                    if imgui.Button(faicons('gear') .. '##ejectgear') then ejectSettings = true end
+                end
                 if not isLauncherActive then
                         switchButton('Быстрое открытие карты', config.additional, 'quickmap')
                         ia.Hint('##quickmap', u8'При зажатии заданной клавиши, у вас откроется мапа', imgui.GetStyle().Colors[imgui.Col.TextDisabled])
@@ -1019,6 +1312,8 @@ local newFrame = imgui.OnFrame(
                             config.additional.wptogglekey = encodeJson(wptogglebuff:GetHotKey()) 
                             inicfg.save(config, "project_fraktura")
                         end
+                        imgui.SameLine()
+                        if imgui.Button(faicons('gear') .. '##wpgear') then wpSettings = true end
                     end
                 imgui.Dummy(imgui.ImVec2(0, 1))
                 imgui.SetCursorPosY(160)
@@ -1089,6 +1384,7 @@ local newFrame = imgui.OnFrame(
                 imgui.SetCursorPosY(SEP_LAST_COLUMN)
                 imgui.Separator()
                 imgui.SetCursorPosX(5)
+                local buttonsRowY = imgui.GetCursorPosY()
                 if imgui.Button(faicons('power_off')) then thisScript():unload() end
                 ia.Hint('##offnitvar', u8'Выключить скрипт.') 
                 if imgui.Button(faicons('trash'), imgui.SameLine()) then
@@ -1115,29 +1411,101 @@ local newFrame = imgui.OnFrame(
                 end
                 ia.Hint('stoknastr', u8'Вернуть скрипт к стандартным настройкам.') 
                 if resp and tonumber(resp.info["version_n"]) > version_n then 
-                    if ia.MaterialButton(faicons('cloud'), imgui.SameLine()) then 
+                    if materialButton(faicons('cloud'), imgui.SameLine()) then 
                         update_state = true
                         msg("Обновляемся, подождите", "good")
                     end
                     ia.Hint('##updaaaaaaate', u8'Кнопка для обновления скрипта, если вы этого ещё не сделали.') 
                 end
-                if ia.MaterialButton(faicons('comments')..'', imgui.SameLine(285)) then 
-                    messageSettings = true
-                end  
-                ia.Hint('##messagesettings', u8'Кнопка для настройки сообщений', imgui.GetStyle().Colors[imgui.Col.TextDisabled])
+                imgui.SameLine(253)
+                imgui.SetCursorPosY(buttonsRowY)
+                if materialButton(faicons('server')..'##reconnect') then
+                    local ok, myid = sampGetPlayerIdByCharHandle(PLAYER_PED)
+                    if ok then ffi.copy(reconnectNickbuf, sampGetPlayerNickname(myid)) end
+                    reconnectSelected = currentServerIndex()
+                    reconnectSettings = true
+                end
+                ia.Hint('##reconnect', u8'Реконнект по серверам', imgui.GetStyle().Colors[imgui.Col.TextDisabled])
+                imgui.SameLine(285)
+                imgui.SetCursorPosY(buttonsRowY)
+                if materialButton(faicons('gear')..'##uisettings') then
+                    uiSettings = true
+                end
+                ia.Hint('##uisettings', u8'Кастомизация интерфейса', imgui.GetStyle().Colors[imgui.Col.TextDisabled])
             end
         imgui.EndChild()
         imgui.PopStyleColor()
         imgui.End()
-        if messageSettings then imgui.OpenPopup(u8'Настройки сообщений в чат или консоль')
-            if (imgui.BeginPopupModal(u8'Настройки сообщений в чат или консоль', _, imgui.WindowFlags.AlwaysAutoResize + imgui.WindowFlags.NoMove + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoCollapse)) then
-            if imgui.Checkbox(u8'Включить все сообщения в чат', imgui.new.bool(config.messages.chat)) then config.messages.console = false config.messages.silent = false config.messages.chat = not config.messages.chat end
-            if imgui.Checkbox(u8'Вывод всех сообщения в консоль', imgui.new.bool(config.messages.console)) then config.messages.chat = false config.messages.silent = false config.messages.console = not config.messages.console end
-            if imgui.Checkbox(u8'Выключить любые сообщения от скрипта', imgui.new.bool(config.messages.silent)) then config.messages.chat = false config.messages.console = false  config.messages.silent = not config.messages.silent end
+        if uiSettings then imgui.OpenPopup(u8'Кастомизация интерфейса')
+            if (imgui.BeginPopupModal(u8'Кастомизация интерфейса', _, imgui.WindowFlags.AlwaysAutoResize + imgui.WindowFlags.NoMove + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoCollapse)) then
+                imgui.Text(u8'Сообщения скрипта')
+                if imgui.Checkbox(u8'Включить все сообщения в чат', imgui.new.bool(config.messages.chat)) then config.messages.console = false config.messages.silent = false config.messages.chat = not config.messages.chat end
+                if imgui.Checkbox(u8'Вывод всех сообщения в консоль', imgui.new.bool(config.messages.console)) then config.messages.chat = false config.messages.silent = false config.messages.console = not config.messages.console end
+                if imgui.Checkbox(u8'Выключить любые сообщения от скрипта', imgui.new.bool(config.messages.silent)) then config.messages.chat = false config.messages.console = false  config.messages.silent = not config.messages.silent end
+                imgui.PushItemWidth(120)
+                if colorEditRgb('Успех', config.messages, 'goodcolor') then applyMessageColors() end
+                imgui.SameLine(220)
+                imgui.TextColored(argbToVec4(0xFF000000 + config.messages.goodcolor), u8('[' .. ownname .. ']:'))
+                imgui.SameLine()
+                imgui.Text(u8'Настройки успешно сохранены')
+                if colorEditRgb('Ошибка', config.messages, 'badcolor') then applyMessageColors() end
+                imgui.SameLine(220)
+                imgui.TextColored(argbToVec4(0xFF000000 + config.messages.badcolor), u8('[' .. ownname .. ']:'))
+                imgui.SameLine()
+                imgui.Text(u8'Загружен! Активация: F2')
                 imgui.Separator()
-                if ia.MaterialButton(u8'Закрыть') then
+                imgui.Text(u8'Тема')
+                if colorEditRgb('Акцентный цвет', config.theme, 'accent') then
+                    themeFromAccent(config.theme.accent, config.theme)
+                    applyTheme()
+                end
+                imgui.PopItemWidth()
+                ia.Hint('##accent', u8'Перекрашивает весь интерфейс в оттенки выбранного цвета. Ручные правки фонов, кнопок, полей и ползунков при этом сбрасываются', imgui.GetStyle().Colors[imgui.Col.TextDisabled])
+                if imgui.CollapsingHeader(u8'Ручная настройка цветов') then
+                    imgui.BeginChild('##themecolors', imgui.ImVec2(360, 220), true)
+                    for _, e in ipairs(themeColors) do
+                        if colorEditArgb(e.name, config.theme, e.key) then applyTheme() end
+                    end
+                    imgui.EndChild()
+                end
+                -- if isLauncherActive then
+                    -- imgui.Separator()
+                    -- imgui.Text(u8'Диалоги лаунчера')
+                    -- local custom = config.customization.dlgstyle ~= 0
+                    -- if ia.ToggleButton(u8'Свой тип диалогов', imgui.new.bool(custom)) then
+                        -- config.customization.dlgstyle = custom and 0 or 4
+                        -- if not custom then setDialogStyle(4) end
+                    -- end
+                    -- ia.Hint('##dlgstyle', u8'Стиль окон диалогов в лаунчере Arizona. Применяется к каждому новому диалогу', imgui.GetStyle().Colors[imgui.Col.TextDisabled])
+                    -- if config.customization.dlgstyle ~= 0 then
+                        -- local colors = imgui.GetStyle().Colors
+                        -- for i, s in ipairs(dialogStyles) do
+                            -- if i % 2 == 0 then imgui.SameLine() end
+                            -- local selected = config.customization.dlgstyle == s[1]
+                            -- if selected then
+                                -- imgui.PushStyleColor(imgui.Col.Button, colors[imgui.Col.ButtonActive])
+                                -- imgui.PushStyleColor(imgui.Col.ButtonHovered, colors[imgui.Col.ButtonActive])
+                            -- end
+                            -- if imgui.Button(u8(s[2]) .. '##dlgstyle' .. s[1], imgui.ImVec2(175, 26)) then
+                                -- config.customization.dlgstyle = s[1]
+                                -- setDialogStyle(s[1])
+                            -- end
+                            -- if selected then imgui.PopStyleColor(2) end
+                        -- end
+                    -- end
+                -- end
+                imgui.Separator()
+                if imgui.Button(u8'Сбросить цвета') then
+                    for k, v in pairs(themeFromAccent(defaultAccent)) do config.theme[k] = v end
+                    config.messages.goodcolor, config.messages.badcolor = defaultGoodColor, defaultBadColor
+                    applyTheme()
+                    applyMessageColors()
+                end
+                imgui.SameLine()
+                if imgui.Button(u8'Закрыть') then
+                    inicfg.save(config, "project_fraktura")
                     imgui.CloseCurrentPopup()
-                    messageSettings = false
+                    uiSettings = false
                 end
                 imgui.EndPopup()
             end
@@ -1282,6 +1650,267 @@ local newFrame = imgui.OnFrame(
                 imgui.EndPopup()
             end
         end
+        if plusChatSettings then imgui.OpenPopup(u8'Настройки плюс-чата')
+            if (imgui.BeginPopupModal(u8'Настройки плюс-чата', _, imgui.WindowFlags.AlwaysAutoResize + imgui.WindowFlags.NoMove + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoCollapse)) then
+                    imgui.Text(u8'Шрифт')
+                    imgui.PushItemWidth(170)
+                    imgui.SameLine()
+                    if imgui.InputText('##pcFont', fontPlusChatinput, sizeof(fontPlusChatinput) - 1) then
+                        config.pluschat.font = u8:decode(str(fontPlusChatinput))
+                        updatePlusChatFont()
+                        inicfg.save(config, "project_fraktura")
+                    end
+                    imgui.PopItemWidth()
+                    imgui.Text(u8'Размер')
+                    imgui.PushItemWidth(90)
+                    imgui.SameLine()
+                    if imgui.InputInt('##pcSize', sizePlusChatinput, 1, 0) then
+                        if sizePlusChatinput[0] < 1 then sizePlusChatinput[0] = 1 end
+                        config.pluschat.size = tonumber(sizePlusChatinput[0])
+                        updatePlusChatFont()
+                        inicfg.save(config, "project_fraktura")
+                    end
+                    imgui.Text(u8'Строк')
+                    imgui.SameLine()
+                    if imgui.InputInt('##pcLines', linesPlusChatinput, 1, 0) then
+                        if linesPlusChatinput[0] < 1 then linesPlusChatinput[0] = 1 end
+                        config.pluschat.lines = tonumber(linesPlusChatinput[0])
+                        inicfg.save(config, "project_fraktura")
+                    end
+                    imgui.PopItemWidth()
+                    for i, f in ipairs(plusChatStyleFlags) do
+                        if i % 2 == 0 then imgui.SameLine(120) end
+                        if imgui.Checkbox(u8(f[1]), imgui.new.bool(bit.band(config.pluschat.style, f[2]) ~= 0)) then
+                            config.pluschat.style = bit.bxor(config.pluschat.style, f[2])
+                            updatePlusChatFont()
+                            inicfg.save(config, "project_fraktura")
+                        end
+                    end
+                    if ia.ToggleButton(u8'Показывать время сообщения', imgui.new.bool(config.pluschat.timestamp)) then
+                        config.pluschat.timestamp = not config.pluschat.timestamp
+                        inicfg.save(config, "project_fraktura")
+                    end
+                    if imgui.Button(u8'Изменить расположение') then
+                        plusChatChangePos = true
+                        imgui.CloseCurrentPopup()
+                        plusChatSettings = false
+                        renderWindow[0] = false
+                        msg("Измените расположение плюс-чата курсором мыши и нажмите ЛКМ", "bad")
+                    end
+                    imgui.SameLine()
+                    if imgui.Button(u8'Очистить') then
+                        renderMessages = {}
+                    end
+                    if imgui.Button(u8'Закрыть') then
+                        imgui.CloseCurrentPopup()
+                        plusChatSettings = false
+                    end
+                imgui.EndPopup()
+            end
+        end
+        if wpSettings then imgui.OpenPopup(u8'Настройки трейсера до метки')
+            if (imgui.BeginPopupModal(u8'Настройки трейсера до метки', _, imgui.WindowFlags.AlwaysAutoResize + imgui.WindowFlags.NoMove + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoCollapse)) then
+                    imgui.PushItemWidth(180)
+                    wpSliderInt('Толщина линии', 'lineWidth', 1, 6)
+                    wpSliderFloat('Высота старта (м)', 'startHeight', 0.0, 1.0, '%.2f')
+                    wpSliderFloat('Скрывать дальше (м)', 'hideDistance', 5.0, 1000.0, '%.0f')
+                    colorEditArgb('Цвет линии', WP, 'lineColor')
+                    imgui.TextDisabled(u8'В интерьерах трейсер не рисуется')
+                    imgui.Separator()
+                    if ia.ToggleButton(u8'Круг на земле', imgui.new.bool(WP.markerEnabled)) then
+                        WP.markerEnabled = not WP.markerEnabled
+                    end
+                    if WP.markerEnabled then
+                        wpSliderFloat('Радиус (м)', 'markerRadius', 0.3, 6.0, '%.1f')
+                        wpSliderInt('Сегменты', 'markerSegments', 12, 120)
+                        wpSliderInt('Толщина круга', 'markerWidth', 1, 6)
+                        wpSliderFloat('Смещение от земли (м)', 'groundOffset', 0.0, 0.2, '%.2f')
+                        colorEditArgb('Цвет круга', WP, 'markerColor')
+                    end
+                    imgui.Separator()
+                    if ia.ToggleButton(u8'Расстояние над меткой', imgui.new.bool(WP.showDistance)) then
+                        WP.showDistance = not WP.showDistance
+                    end
+                    if WP.showDistance then
+                        if wpSliderInt('Размер текста', 'textSize', 6, 30) then updateWpFont() end
+                        wpSliderInt('Высота текста (px)', 'distanceOffsetY', 0, 120)
+                        colorEditArgb('Цвет текста', WP, 'textColor')
+                    end
+                    imgui.PopItemWidth()
+                    imgui.Separator()
+                    imgui.Text(u8'Метка (X Y Z)')
+                    imgui.PushItemWidth(260)
+                    imgui.InputFloat3('##wpCoords', wpCoordsinput, '%.2f')
+                    imgui.PopItemWidth()
+                    if imgui.Button(u8'Поставить') then setWp(wpCoordsinput[0], wpCoordsinput[1], wpCoordsinput[2]) end
+                    imgui.SameLine()
+                    if imgui.Button(u8'На мою позицию') then setWp(getCharCoordinates(PLAYER_PED)) end
+                    imgui.SameLine()
+                    if imgui.Button(u8'Убрать') then hasWp = false end
+                    if imgui.Button(u8'Закрыть') then
+                        inicfg.save(config, "project_fraktura")
+                        imgui.CloseCurrentPopup()
+                        wpSettings = false
+                    end
+                imgui.EndPopup()
+            end
+        end
+        if ejectSettings then imgui.OpenPopup(u8'Настройки авто-выкидывания')
+            if (imgui.BeginPopupModal(u8'Настройки авто-выкидывания', _, imgui.WindowFlags.AlwaysAutoResize + imgui.WindowFlags.NoMove + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoCollapse)) then
+                    local ce = config.carejector
+                    imgui.PushItemWidth(180)
+                    if imgui.SliderInt(u8'Задержка (мс)', ejectIntervalinput, 0, 10000) then
+                        ce.interval = ejectIntervalinput[0]
+                    end
+                    imgui.PopItemWidth()
+                    ia.Hint('##ejectinterval', u8'Пауза между попытками /eject. Ctrl+клик - ввести число', imgui.GetStyle().Colors[imgui.Col.TextDisabled])
+                    if ia.ToggleButton(u8'Выключать после успешного выкидывания', imgui.new.bool(ce.autooff)) then
+                        ce.autooff = not ce.autooff
+                    end
+                    if ia.ToggleButton(u8'Скрывать сообщения о флуде и попытках', imgui.new.bool(ce.suppress)) then
+                        ce.suppress = not ce.suppress
+                    end
+                    if ia.ToggleButton(u8'Сообщение в чат после выкидывания', imgui.new.bool(ce.chatsucc)) then
+                        ce.chatsucc = not ce.chatsucc
+                    end
+                    if ce.chatsucc then
+                        imgui.PushItemWidth(300)
+                        if imgui.InputText('##ejecttext', ejectTextbuf, sizeof(ejectTextbuf) - 1) then
+                            ce.succtext = u8:decode(str(ejectTextbuf))
+                        end
+                        imgui.PopItemWidth()
+                    end
+                    imgui.Separator()
+                    if ia.ToggleButton(u8'Не выкидывать игроков из игнор-листа', imgui.new.bool(ce.useignore)) then
+                        ce.useignore = not ce.useignore
+                    end
+                    imgui.PushItemWidth(200)
+                    imgui.InputText('##ejectnick', ejectNickbuf, sizeof(ejectNickbuf) - 1)
+                    imgui.PopItemWidth()
+                    imgui.SameLine()
+                    if imgui.Button(u8'Добавить в игнор') then
+                        addEjectIgnore(u8:decode(str(ejectNickbuf)))
+                        ejectNickbuf[0] = 0
+                    end
+                    imgui.BeginChild('##ejectignore', imgui.ImVec2(320, 90), true)
+                    if #ejectIgnore == 0 then imgui.TextDisabled(u8'Игнор-лист пуст') end
+                    for i, nick in ipairs(ejectIgnore) do
+                        if imgui.Button(faicons('xmark') .. '##ejectdel' .. i) then
+                            removeEjectIgnore(i)
+                            break
+                        end
+                        imgui.SameLine()
+                        imgui.Text(u8(nick))
+                    end
+                    imgui.EndChild()
+                    imgui.Separator()
+                    imgui.PushItemWidth(180)
+                    if imgui.SliderFloat(u8'Игроки рядом (м)', ejectDistinput, 1.0, 100.0, '%.0f') then
+                        ce.dist = ejectDistinput[0]
+                    end
+                    imgui.PopItemWidth()
+                    imgui.BeginChild('##ejectnear', imgui.ImVec2(320, 90), true)
+                    local px, py, pz = getCharCoordinates(PLAYER_PED)
+                    for _, ped in ipairs(getAllChars()) do
+                        if doesCharExist(ped) and ped ~= PLAYER_PED then
+                            local ok, id = sampGetPlayerIdByCharHandle(ped)
+                            if ok then
+                                local nick = sampGetPlayerNickname(id)
+                                local x, y, z = getCharCoordinates(ped)
+                                local d = getDistanceBetweenCoords3d(px, py, pz, x, y, z)
+                                if d <= ce.dist and not isEjectIgnored(nick) then
+                                    if imgui.Button(u8'В игнор##ejectnear' .. id) then addEjectIgnore(nick) end
+                                    imgui.SameLine()
+                                    imgui.Text(u8(string.format('[%d] %s - %.1f м', id, nick, d)))
+                                end
+                            end
+                        end
+                    end
+                    imgui.EndChild()
+                    if imgui.Button(u8'Закрыть') then
+                        inicfg.save(config, "project_fraktura")
+                        imgui.CloseCurrentPopup()
+                        ejectSettings = false
+                    end
+                imgui.EndPopup()
+            end
+        end
+        if reconnectSettings then imgui.OpenPopup(u8'Реконнект по серверам')
+            if (imgui.BeginPopupModal(u8'Реконнект по серверам', _, imgui.WindowFlags.AlwaysAutoResize + imgui.WindowFlags.NoMove + imgui.WindowFlags.NoResize + imgui.WindowFlags.NoCollapse)) then
+                    local colors = imgui.GetStyle().Colors
+                    local current = currentServerIndex()
+                    local ip, port = sampGetCurrentServerAddress()
+                    local function closeReconnect()
+                        imgui.CloseCurrentPopup()
+                        reconnectSettings = false
+                        renderWindow[0] = false
+                    end
+
+                    imgui.TextDisabled(u8'Текущий сервер')
+                    imgui.Text(faicons('location_dot') .. ' ' .. u8(parseServer()))
+                    imgui.SameLine()
+                    imgui.TextDisabled(tostring(ip) .. ':' .. tostring(port))
+                    if imgui.Button(faicons('arrows_rotate') .. u8'  Переподключиться', imgui.ImVec2(340, 30)) then
+                        reconnectCurrent()
+                        closeReconnect()
+                    end
+
+                    imgui.Separator()
+                    imgui.TextDisabled(u8'Другой сервер')
+                    imgui.AlignTextToFramePadding()
+                    imgui.Text(u8'Ник')
+                    imgui.SameLine(50)
+                    imgui.PushItemWidth(295)
+                    imgui.InputText('##reconnectnick', reconnectNickbuf, sizeof(reconnectNickbuf) - 1)
+                    imgui.PopItemWidth()
+                    local connect = false
+                    imgui.BeginChild('##servers', imgui.ImVec2(340, 200), true)
+                    for i, s in ipairs(arizonaServers) do
+                        if imgui.Selectable(u8(s.id .. '   ' .. s.name) .. '##server' .. i, reconnectSelected == i) then
+                            reconnectSelected = i
+                            if imgui.IsMouseDoubleClicked(0) then connect = true end
+                        end
+                        imgui.SameLine(200)
+                        if i == current then
+                            imgui.TextColored(colors[imgui.Col.CheckMark], u8'вы здесь')
+                        else
+                            imgui.TextDisabled(s.ip)
+                        end
+                    end
+                    imgui.EndChild()
+                    local server = arizonaServers[reconnectSelected or 0]
+                    local label = server and ('  Подключиться к ' .. server.name) or '  Выберите сервер'
+                    if imgui.Button(faicons('right_to_bracket') .. u8(label) .. '##connect', imgui.ImVec2(340, 30)) or connect then
+                        if server then
+                            local nick = u8:decode(str(reconnectNickbuf))
+                            msg('Подключаемся к ' .. server.name .. '...', 'good')
+                            reconnectTo(server.ip, 7777, nick ~= '' and nick or nil)
+                            closeReconnect()
+                        end
+                    end
+                    imgui.TextDisabled(u8'Двойной клик по серверу - сразу подключиться')
+
+                    imgui.Separator()
+                    if ia.ToggleButton(u8'Команда реконнекта', imgui.new.bool(config.reconnect.cmdon)) then
+                        config.reconnect.cmdon = not config.reconnect.cmdon
+                    end
+                    if config.reconnect.cmdon then
+                        imgui.SameLine()
+                        imgui.PushItemWidth(90)
+                        if imgui.InputText('##reconnectcmd', reconnectCmdbuf, sizeof(reconnectCmdbuf) - 1) then
+                            config.reconnect.cmd = u8:decode(str(reconnectCmdbuf)):gsub('^/', '')
+                        end
+                        imgui.PopItemWidth()
+                    end
+                    ia.Hint('##reconnectcmd', u8'Команда в чат, которая переподключает к текущему серверу', imgui.GetStyle().Colors[imgui.Col.TextDisabled])
+                    if imgui.Button(u8'Закрыть', imgui.ImVec2(340, 0)) then
+                        inicfg.save(config, "project_fraktura")
+                        imgui.CloseCurrentPopup()
+                        reconnectSettings = false
+                    end
+                imgui.EndPopup()
+            end
+        end
     end
 )
 
@@ -1352,20 +1981,7 @@ function main()
         tickServerTime()
         tickAnotherTime()
         tickCaptcha()
-
-        if config.pluschat.pluschat and plusChatFont then
-            if #renderMessages > config.pluschat.lines then
-                table.remove(renderMessages, 1)
-            end
-            local y = centerY
-            for k, v in ipairs(renderMessages) do
-                if k <= config.pluschat.lines then
-                    local text = v[2]
-                    renderFontDrawText(plusChatFont, text, centerX, y, bit.bor(v[1], 0xFF000000))
-                    y = y + renderGetFontDrawHeight(plusChatFont) + 2
-                end
-            end
-        end
+        tickPlusChat()
 
         if config.additional.wpline and hasWp then drawWpTracer() end
         if config.additional.fastmap then renderMap() end
@@ -1374,8 +1990,9 @@ end
 
 function ev.onPassengerSync(player_id, passengersyncdata)
     local nick = sampGetPlayerNickname(player_id)
-    if config.additional.carejector and ((os.clock() - lasttry) > (interval/1000)) then
+    if config.additional.carejector and ((os.clock() - lasttry) > (config.carejector.interval/1000)) then
         if player_id ~= select(2,sampGetPlayerIdByCharHandle(PLAYER_HANDLE)) then
+            if config.carejector.useignore and isEjectIgnored(nick) then return end
             lasttry = os.clock()
             sampSendChat(("/eject %s"):format(player_id))
         end
@@ -1410,6 +2027,9 @@ function ev.onShowTextDraw(textdrawId, data)
 end
 
 function ev.onShowDialog(id, style, title, b1, b2, text)
+    -- if isLauncherActive and config.customization.dlgstyle ~= 0 then
+        -- setDialogStyle(config.customization.dlgstyle)
+    -- end
     if title:find("Откуда вы о нас узнали") then
         show_arz_notify('info','Информация','При регистрации на ник Nysson_Inmayhearti ты получишь 50КК на 6 уровне!', 5000)
     end 
@@ -1450,6 +2070,11 @@ function ev.onSendCommand(str)
     local cmd, args = str:match('^/(%S+)%s*(.*)')
     if not cmd then return end
     cmd = cmd:lower()
+
+    if config.reconnect.cmdon and cmd == tostring(config.reconnect.cmd):lower() then
+        reconnectCurrent()
+        return false
+    end
 
     if config.additional.fd and not isLauncherActive then
         if cmd == config.additional.fdc:lower() then
@@ -1503,9 +2128,17 @@ function ev.onServerMessage(color, text)
         end
     end
     if text:find('PC LAUNCHER') then isLauncherActive = true return false end
-    if text:find("выкинул") then
-        if config.additional.carejector then
-            config.additional.carejector = false
+    if config.additional.carejector then
+        if config.carejector.suppress and (text:find('Не флуди!') or text:find('попытался выкинуть из транспорта игрока')) then
+            return false
+        end
+        if text:find("выкинул") then
+            if config.carejector.chatsucc and tostring(config.carejector.succtext) ~= '' then
+                sampSendChat(tostring(config.carejector.succtext))
+            end
+            if config.carejector.autooff then
+                config.additional.carejector = false
+            end
         end
     end
     if text:find('этот бизнес ваш!') and color == 1941201407 then
