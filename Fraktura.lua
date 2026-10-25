@@ -23,8 +23,8 @@ local dlstatus = require('moonloader').download_status
 local updates_url = 'https://raw.githubusercontent.com/blackw1ndow/project_fraktura/refs/heads/main/updates.json'
 local script_url = 'https://raw.githubusercontent.com/blackw1ndow/project_fraktura/main/Fraktura.lua'
 
-version = '1.2.1'
-version_n = 11
+version = '1.2.1b'
+version_n = 13
 
 resp = nil
 
