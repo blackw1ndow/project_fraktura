@@ -210,7 +210,6 @@ local config = inicfg.load({
     reconnect = {
         cmdon = false,
         cmd = 'recc',
-        ping = true,
     },
     messages = {
         silent = false,
@@ -338,35 +337,26 @@ pcall(ffi.cdef, 'void* GetModuleHandleA(const char* name);')
 pcall(ffi.cdef, 'const char* GetCommandLineA(void);')
 pcall(ffi.cdef, [[
 typedef struct {
-    uint32_t Address;
-    uint32_t Status;
-    uint32_t RoundTripTime;
-    uint16_t DataSize;
-    uint16_t Reserved;
-    void* Data;
-    uint8_t Ttl, Tos, Flags, OptionsSize;
-    void* OptionsData;
-} fraktura_icmp_reply;
+    uint32_t cb;
+    void* lpReserved;
+    void* lpDesktop;
+    void* lpTitle;
+    uint32_t dwX, dwY, dwXSize, dwYSize, dwXCountChars, dwYCountChars, dwFillAttribute, dwFlags;
+    uint16_t wShowWindow, cbReserved2;
+    void* lpReserved2;
+    void* hStdInput;
+    void* hStdOutput;
+    void* hStdError;
+} fraktura_startupinfo;
 typedef struct {
-    char* h_name;
-    char** h_aliases;
-    short h_addrtype;
-    short h_length;
-    char** h_addr_list;
-} fraktura_hostent;
+    void* hProcess;
+    void* hThread;
+    uint32_t dwProcessId;
+    uint32_t dwThreadId;
+} fraktura_procinfo;
 ]])
-pcall(ffi.cdef, 'void* __stdcall IcmpCreateFile(void);')
-pcall(ffi.cdef, 'int __stdcall IcmpCloseHandle(void* handle);')
-pcall(ffi.cdef, 'uint32_t __stdcall IcmpSendEcho2(void* handle, void* event, void* apc, void* ctx, uint32_t dest, void* data, uint16_t size, void* options, void* reply, uint32_t replySize, uint32_t timeout);')
-pcall(ffi.cdef, 'uint32_t __stdcall IcmpParseReplies(void* reply, uint32_t replySize);')
-pcall(ffi.cdef, 'void* __stdcall gethostbyname(const char* name);')
-pcall(ffi.cdef, 'void* __stdcall CreateEventA(void* attr, int manual, int initial, const char* name);')
-pcall(ffi.cdef, 'uint32_t __stdcall WaitForSingleObject(void* handle, uint32_t ms);')
+pcall(ffi.cdef, 'int __stdcall CreateProcessA(const char* app, char* cmd, void* pattr, void* tattr, int inherit, uint32_t flags, void* env, const char* dir, fraktura_startupinfo* si, fraktura_procinfo* pi);')
 pcall(ffi.cdef, 'int __stdcall CloseHandle(void* handle);')
-pcall(ffi.cdef, 'void* malloc(size_t size);')
-pcall(ffi.cdef, 'void free(void* ptr);')
-local iphlpOk, iphlp = pcall(ffi.load, 'iphlpapi')
-local ws2Ok, ws2 = pcall(ffi.load, 'ws2_32')
 
 local function detectLauncher()
     if ffi.C.GetModuleHandleA('libcef.asi') ~= nil then return true end
@@ -422,6 +412,9 @@ local arizonaServers = {
     { id = '31', name = 'Drake',       ip = '80.66.82.22' },
     { id = '32', name = 'Space',       ip = '80.66.82.199' },
 }
+for _, s in ipairs(arizonaServers) do
+    s.host = s.name:lower():gsub('[^%w]', '') .. '.arizona-rp.com'
+end
 local reconnectSelected = nil
 reconnectNickbuf = new.char[32]()
 reconnectCmdbuf = new.char[32](tostring(config.reconnect.cmd))
@@ -437,101 +430,58 @@ function currentServerIndex()
     end
 end
 
-local function resolveIPv4(host)
-    local a, b, c, d = tostring(host):match('^(%d+)%.(%d+)%.(%d+)%.(%d+)$')
-    if a then return tonumber(a) + tonumber(b) * 0x100 + tonumber(c) * 0x10000 + tonumber(d) * 0x1000000 end
-    if not ws2Ok then return end
-    local he = ffi.cast('fraktura_hostent*', ws2.gethostbyname(tostring(host)))
-    if he == nil or he.h_addr_list[0] == nil then return end
-    return ffi.cast('uint32_t*', he.h_addr_list[0])[0]
+local function silentCurl(host)
+    local exe = (os.getenv('SystemRoot') or 'C:\\Windows') .. '\\System32\\curl.exe'
+    local cmd = string.format('"%s" -s -o NUL -m 2 --connect-timeout 2 http://%s', exe, host)
+    local si = ffi.new('fraktura_startupinfo')
+    si.cb = ffi.sizeof(si)
+    si.dwFlags = 1
+    si.wShowWindow = 0
+    local pi = ffi.new('fraktura_procinfo')
+    if ffi.C.CreateProcessA(nil, ffi.new('char[?]', #cmd + 1, cmd), nil, nil, 0, 0x08000000, nil, nil, si, pi) ~= 0 then
+        ffi.C.CloseHandle(pi.hProcess)
+        ffi.C.CloseHandle(pi.hThread)
+    end
 end
 
-function pingServer(host, timeout)
-    if not iphlpOk then return nil end
-    local dest = resolveIPv4(host)
-    if not dest then return nil end
-    local icmp = iphlp.IcmpCreateFile()
-    if icmp == nil or icmp == ffi.cast('void*', -1) then return nil end
-    local event = ffi.C.CreateEventA(nil, 1, 0, nil)
-    if event == nil then
-        iphlp.IcmpCloseHandle(icmp)
-        return nil
-    end
-    local replySize = 256
-    local mem = ffi.C.malloc(replySize + 8)
-    local data = ffi.cast('char*', mem) + replySize
-    ffi.copy(data, 'fraktura', 8)
-    iphlp.IcmpSendEcho2(icmp, event, nil, nil, dest, data, 8, nil, mem, replySize, timeout)
-    local deadline = os.clock() + timeout / 1000 + 1
-    while ffi.C.WaitForSingleObject(event, 0) ~= 0 do
-        if os.clock() > deadline then
-            iphlp.IcmpCloseHandle(icmp)
-            ffi.C.CloseHandle(event)
-            return false
-        end
-        wait(0)
-    end
-    local rtt = false
-    if iphlp.IcmpParseReplies(mem, replySize) > 0 then
-        local reply = ffi.cast('fraktura_icmp_reply*', mem)
-        if reply.Status == 0 then rtt = tonumber(reply.RoundTripTime) end
-    end
-    iphlp.IcmpCloseHandle(icmp)
-    ffi.C.CloseHandle(event)
-    ffi.C.free(mem)
-    return rtt
+function knockServer(host)
+    local tmp = (os.getenv('TEMP') or getWorkingDirectory()) .. '\\fraktura_knock_' .. math.random(1000, 9999) .. '.tmp'
+    downloadUrlToFile('http://' .. host, tmp, function()
+        if doesFileExist(tmp) then os.remove(tmp) end
+    end)
+    pcall(silentCurl, host)
 end
 
 reconnectWaiting = nil
 
-local function connectNow(ip, port, nick)
-    if nick then sampSetLocalPlayerName(nick) end
-    sampConnectToServer(ip, port)
-end
-
-function reconnectTo(ip, port, nick)
-    if not config.reconnect.ping then
-        reconnectWaiting = nil
-        return connectNow(ip, port, nick)
-    end
+function reconnectTo(host, port, nick)
     local token = {}
     reconnectWaiting = token
     lua_thread.create(function()
-        local attempt = 0
-        while reconnectWaiting == token do
-            attempt = attempt + 1
-            local rtt = pingServer(ip, 1000)
-            if reconnectWaiting ~= token then return end
-            if rtt then
-                msg('Сервер отвечает, пинг: ' .. goodcolor .. rtt .. ' мс', 'good')
-                break
-            elseif rtt == nil then
-                msg('Не удалось пропинговать сервер, подключаемся без проверки', 'bad')
-                break
-            end
-            if attempt == 1 then
-                msg('Сервер не отвечает, ждём... Повторный реконнект - отмена', 'bad')
-            elseif attempt % 10 == 0 then
-                msg('Сервер всё ещё не отвечает (попыток: ' .. attempt .. ')', 'bad')
-            end
-            wait(3000)
+        if sampIsLocalPlayerSpawned() or sampGetGamestate() ~= 0 then
+            sampSetGamestate(0)
+            pcall(sampDisconnectWithReason, 0)
+            wait(1200)
         end
+        for i = 1, 2 do
+            if reconnectWaiting ~= token then return end
+            pcall(knockServer, host)
+            wait(700)
+        end
+        wait(2200)
         if reconnectWaiting ~= token then return end
         reconnectWaiting = nil
-        connectNow(ip, port, nick)
+        if nick then sampSetLocalPlayerName(nick) end
+        sampConnectToServer(host, port)
     end)
 end
 
 function reconnectCurrent()
-    if reconnectWaiting then
-        reconnectWaiting = nil
-        msg('Ожидание сервера отменено', 'bad')
-        return
-    end
     local ip, port = sampGetCurrentServerAddress()
     if not ip or ip == '' then return end
+    local server = arizonaServers[currentServerIndex() or 0]
     msg('Переподключаемся...', 'good')
-    reconnectTo(ip, port)
+    reconnectTo(server and server.host or ip, port)
 end
 wpSettings = false
 
@@ -1967,8 +1917,7 @@ local newFrame = imgui.OnFrame(
                     imgui.Text(faicons('location_dot') .. ' ' .. u8(parseServer()))
                     imgui.SameLine()
                     imgui.TextDisabled(tostring(ip) .. ':' .. tostring(port))
-                    local currentLabel = reconnectWaiting and u8'  Отменить ожидание сервера' or u8'  Переподключиться'
-                    if imgui.Button(faicons('arrows_rotate') .. currentLabel .. '##reconnectcurrent', imgui.ImVec2(340, 30)) then
+                    if imgui.Button(faicons('arrows_rotate') .. u8'  Переподключиться', imgui.ImVec2(340, 30)) then
                         reconnectCurrent()
                         closeReconnect()
                     end
@@ -2000,19 +1949,15 @@ local newFrame = imgui.OnFrame(
                     local label = server and ('  Подключиться к ' .. server.name) or '  Выберите сервер'
                     if imgui.Button(faicons('right_to_bracket') .. u8(label) .. '##connect', imgui.ImVec2(340, 30)) or connect then
                         if server then
-                            local nick = u8:decode(str(reconnectNickbuf))
+                            local nick = u8:decode(str(reconnectNickbuf)):gsub('%s+', '')
                             msg('Подключаемся к ' .. server.name .. '...', 'good')
-                            reconnectTo(server.ip, 7777, nick ~= '' and nick or nil)
+                            reconnectTo(server.host, 7777, (#nick >= 3 and #nick <= 24) and nick or nil)
                             closeReconnect()
                         end
                     end
                     imgui.TextDisabled(u8'Двойной клик по серверу - сразу подключиться')
 
                     imgui.Separator()
-                    if ia.ToggleButton(u8'Пинг перед подключением', imgui.new.bool(config.reconnect.ping)) then
-                        config.reconnect.ping = not config.reconnect.ping
-                    end
-                    ia.Hint('##reconnectping', u8'Перед подключением пингует сервер. Если он не отвечает (рестарт, лёг) - ждёт и подключается, как только ответит', imgui.GetStyle().Colors[imgui.Col.TextDisabled])
                     if ia.ToggleButton(u8'Команда реконнекта', imgui.new.bool(config.reconnect.cmdon)) then
                         config.reconnect.cmdon = not config.reconnect.cmdon
                     end
