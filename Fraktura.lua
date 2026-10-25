@@ -798,15 +798,16 @@ function updatePlusChatFont()
     plusChatFont = renderCreateFont(config.pluschat.font, config.pluschat.size, config.pluschat.style)
 end
 
+local captchaPending = false
+
 function initHotkeys()
     trainbuff = hotkey.RegisterHotKey('trainbuff', false, decodeJson(config.additional.captrainkey), function()
+        if captchaPending or not config.additional.captrain or not isPlayerActive() then return end
+        captchaPending = true
         lua_thread.create(function()
-            if isPlayerActive() then
-                if config.additional.captrain then
-                    wait(config.additional.customizeddelay and math.random() * (340 - 40) + 40 or 34)
-                    showCaptcha()
-                end
-            end
+            wait(config.additional.customizeddelay and math.random() * (340 - 40) + 40 or 34)
+            captchaPending = false
+            showCaptcha()
         end)
     end)
     wplinebuff = hotkey.RegisterHotKey('wplinebuff', false, decodeJson(config.additional.wplinekey), function()
