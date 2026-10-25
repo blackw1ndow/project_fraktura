@@ -23,8 +23,8 @@ local dlstatus = require('moonloader').download_status
 local updates_url = 'https://raw.githubusercontent.com/blackw1ndow/project_fraktura/refs/heads/main/updates.json'
 local script_url = 'https://raw.githubusercontent.com/blackw1ndow/project_fraktura/main/Fraktura.lua'
 
-version = '1.2'
-version_n = 10
+version = '1.2.1'
+version_n = 11
 
 resp = nil
 
@@ -210,6 +210,7 @@ local config = inicfg.load({
     reconnect = {
         cmdon = false,
         cmd = 'recc',
+        ping = true,
     },
     messages = {
         silent = false,
@@ -335,6 +336,37 @@ reconnectSettings = false
 
 pcall(ffi.cdef, 'void* GetModuleHandleA(const char* name);')
 pcall(ffi.cdef, 'const char* GetCommandLineA(void);')
+pcall(ffi.cdef, [[
+typedef struct {
+    uint32_t Address;
+    uint32_t Status;
+    uint32_t RoundTripTime;
+    uint16_t DataSize;
+    uint16_t Reserved;
+    void* Data;
+    uint8_t Ttl, Tos, Flags, OptionsSize;
+    void* OptionsData;
+} fraktura_icmp_reply;
+typedef struct {
+    char* h_name;
+    char** h_aliases;
+    short h_addrtype;
+    short h_length;
+    char** h_addr_list;
+} fraktura_hostent;
+]])
+pcall(ffi.cdef, 'void* __stdcall IcmpCreateFile(void);')
+pcall(ffi.cdef, 'int __stdcall IcmpCloseHandle(void* handle);')
+pcall(ffi.cdef, 'uint32_t __stdcall IcmpSendEcho2(void* handle, void* event, void* apc, void* ctx, uint32_t dest, void* data, uint16_t size, void* options, void* reply, uint32_t replySize, uint32_t timeout);')
+pcall(ffi.cdef, 'uint32_t __stdcall IcmpParseReplies(void* reply, uint32_t replySize);')
+pcall(ffi.cdef, 'void* __stdcall gethostbyname(const char* name);')
+pcall(ffi.cdef, 'void* __stdcall CreateEventA(void* attr, int manual, int initial, const char* name);')
+pcall(ffi.cdef, 'uint32_t __stdcall WaitForSingleObject(void* handle, uint32_t ms);')
+pcall(ffi.cdef, 'int __stdcall CloseHandle(void* handle);')
+pcall(ffi.cdef, 'void* malloc(size_t size);')
+pcall(ffi.cdef, 'void free(void* ptr);')
+local iphlpOk, iphlp = pcall(ffi.load, 'iphlpapi')
+local ws2Ok, ws2 = pcall(ffi.load, 'ws2_32')
 
 local function detectLauncher()
     if ffi.C.GetModuleHandleA('libcef.asi') ~= nil then return true end
@@ -405,12 +437,97 @@ function currentServerIndex()
     end
 end
 
-function reconnectTo(ip, port, nick)
+local function resolveIPv4(host)
+    local a, b, c, d = tostring(host):match('^(%d+)%.(%d+)%.(%d+)%.(%d+)$')
+    if a then return tonumber(a) + tonumber(b) * 0x100 + tonumber(c) * 0x10000 + tonumber(d) * 0x1000000 end
+    if not ws2Ok then return end
+    local he = ffi.cast('fraktura_hostent*', ws2.gethostbyname(tostring(host)))
+    if he == nil or he.h_addr_list[0] == nil then return end
+    return ffi.cast('uint32_t*', he.h_addr_list[0])[0]
+end
+
+function pingServer(host, timeout)
+    if not iphlpOk then return nil end
+    local dest = resolveIPv4(host)
+    if not dest then return nil end
+    local icmp = iphlp.IcmpCreateFile()
+    if icmp == nil or icmp == ffi.cast('void*', -1) then return nil end
+    local event = ffi.C.CreateEventA(nil, 1, 0, nil)
+    if event == nil then
+        iphlp.IcmpCloseHandle(icmp)
+        return nil
+    end
+    local replySize = 256
+    local mem = ffi.C.malloc(replySize + 8)
+    local data = ffi.cast('char*', mem) + replySize
+    ffi.copy(data, 'fraktura', 8)
+    iphlp.IcmpSendEcho2(icmp, event, nil, nil, dest, data, 8, nil, mem, replySize, timeout)
+    local deadline = os.clock() + timeout / 1000 + 1
+    while ffi.C.WaitForSingleObject(event, 0) ~= 0 do
+        if os.clock() > deadline then
+            iphlp.IcmpCloseHandle(icmp)
+            ffi.C.CloseHandle(event)
+            return false
+        end
+        wait(0)
+    end
+    local rtt = false
+    if iphlp.IcmpParseReplies(mem, replySize) > 0 then
+        local reply = ffi.cast('fraktura_icmp_reply*', mem)
+        if reply.Status == 0 then rtt = tonumber(reply.RoundTripTime) end
+    end
+    iphlp.IcmpCloseHandle(icmp)
+    ffi.C.CloseHandle(event)
+    ffi.C.free(mem)
+    return rtt
+end
+
+reconnectWaiting = nil
+
+local function connectNow(ip, port, nick)
     if nick then sampSetLocalPlayerName(nick) end
     sampConnectToServer(ip, port)
 end
 
+function reconnectTo(ip, port, nick)
+    if not config.reconnect.ping then
+        reconnectWaiting = nil
+        return connectNow(ip, port, nick)
+    end
+    local token = {}
+    reconnectWaiting = token
+    lua_thread.create(function()
+        local attempt = 0
+        while reconnectWaiting == token do
+            attempt = attempt + 1
+            local rtt = pingServer(ip, 1000)
+            if reconnectWaiting ~= token then return end
+            if rtt then
+                msg('Сервер отвечает, пинг: ' .. goodcolor .. rtt .. ' мс', 'good')
+                break
+            elseif rtt == nil then
+                msg('Не удалось пропинговать сервер, подключаемся без проверки', 'bad')
+                break
+            end
+            if attempt == 1 then
+                msg('Сервер не отвечает, ждём... Повторный реконнект - отмена', 'bad')
+            elseif attempt % 10 == 0 then
+                msg('Сервер всё ещё не отвечает (попыток: ' .. attempt .. ')', 'bad')
+            end
+            wait(3000)
+        end
+        if reconnectWaiting ~= token then return end
+        reconnectWaiting = nil
+        connectNow(ip, port, nick)
+    end)
+end
+
 function reconnectCurrent()
+    if reconnectWaiting then
+        reconnectWaiting = nil
+        msg('Ожидание сервера отменено', 'bad')
+        return
+    end
     local ip, port = sampGetCurrentServerAddress()
     if not ip or ip == '' then return end
     msg('Переподключаемся...', 'good')
@@ -1850,7 +1967,8 @@ local newFrame = imgui.OnFrame(
                     imgui.Text(faicons('location_dot') .. ' ' .. u8(parseServer()))
                     imgui.SameLine()
                     imgui.TextDisabled(tostring(ip) .. ':' .. tostring(port))
-                    if imgui.Button(faicons('arrows_rotate') .. u8'  Переподключиться', imgui.ImVec2(340, 30)) then
+                    local currentLabel = reconnectWaiting and u8'  Отменить ожидание сервера' or u8'  Переподключиться'
+                    if imgui.Button(faicons('arrows_rotate') .. currentLabel .. '##reconnectcurrent', imgui.ImVec2(340, 30)) then
                         reconnectCurrent()
                         closeReconnect()
                     end
@@ -1891,6 +2009,10 @@ local newFrame = imgui.OnFrame(
                     imgui.TextDisabled(u8'Двойной клик по серверу - сразу подключиться')
 
                     imgui.Separator()
+                    if ia.ToggleButton(u8'Пинг перед подключением', imgui.new.bool(config.reconnect.ping)) then
+                        config.reconnect.ping = not config.reconnect.ping
+                    end
+                    ia.Hint('##reconnectping', u8'Перед подключением пингует сервер. Если он не отвечает (рестарт, лёг) - ждёт и подключается, как только ответит', imgui.GetStyle().Colors[imgui.Col.TextDisabled])
                     if ia.ToggleButton(u8'Команда реконнекта', imgui.new.bool(config.reconnect.cmdon)) then
                         config.reconnect.cmdon = not config.reconnect.cmdon
                     end
